@@ -502,3 +502,81 @@ export async function getPrincipal(db: Db, id: string): Promise<Principal | null
   const { rows } = await db.query<Principal>(`SELECT ${PRINCIPAL_COLS} FROM principals WHERE id=$1`, [id]);
   return rows[0] ?? null;
 }
+
+// ---------- supervision views ----------
+
+export interface ActivityItem {
+  id: number; type: string; payload: Record<string, unknown>; createdAt: string;
+  taskId: string; taskTitle: string; boardId: string;
+  actorId: string; actorName: string; actorKind: "human" | "agent";
+}
+
+/** Newest-first change feed across tasks, optionally for one project. */
+export async function listActivity(db: Db, f: { boardId?: string; limit?: number } = {}): Promise<ActivityItem[]> {
+  const params: unknown[] = [Math.min(Math.max(f.limit ?? 30, 1), 200)];
+  let where = "";
+  if (f.boardId) (params.push(f.boardId), (where = "WHERE t.board_id = $2"));
+  const { rows } = await db.query<ActivityItem>(
+    `SELECT e.id, e.type, e.payload, e.created_at AS "createdAt", e.task_id AS "taskId", t.title AS "taskTitle",
+            t.board_id AS "boardId", p.id AS "actorId", p.name AS "actorName", p.kind AS "actorKind"
+     FROM events e JOIN tasks t ON t.id = e.task_id JOIN principals p ON p.id = e.actor_id
+     ${where} ORDER BY e.id DESC LIMIT $1`,
+    params,
+  );
+  return rows;
+}
+
+export type AgentState = "working" | "blocked" | "stale" | "idle";
+export interface AgentRow {
+  id: string; name: string; canConfirm: boolean; state: AgentState;
+  lastActiveAt: string | null;
+  /** Events per 5-minute bucket over the last hour, oldest first (12 values). */
+  activity: number[];
+  tasks: { id: string; title: string; status: Status; needsInput: boolean; question: string | null; leaseExpiresAt: string | null }[];
+}
+export interface Overview {
+  agents: AgentRow[];
+  kpis: { agentsActive: number; agentsTotal: number; waitingOnHuman: number; staleLeases: number; doneToday: number };
+  pipeline: Record<Status, number>;
+}
+
+/** One-call summary for the "Agents" supervision screen. */
+export async function overview(db: Db, boardId?: string): Promise<Overview> {
+  const tasks = await listTasks(db, { boardId });
+  const [agents, last, buckets, done] = await Promise.all([
+    db.query<{ id: string; name: string; canConfirm: boolean }>(
+      `SELECT id, name, can_confirm AS "canConfirm" FROM principals WHERE kind='agent' ORDER BY name`),
+    db.query<{ actor: string; at: string }>(`SELECT actor_id AS actor, max(created_at) AS at FROM events GROUP BY actor_id`),
+    db.query<{ actor: string; b: number; n: number }>(
+      `SELECT actor_id AS actor, floor(extract(epoch FROM (now() - created_at)) / 300)::int AS b, count(*)::int AS n
+       FROM events WHERE created_at > now() - interval '1 hour' GROUP BY 1, 2`),
+    db.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM events e JOIN tasks t ON t.id = e.task_id
+       WHERE e.payload->>'to' = 'done' AND e.created_at >= date_trunc('day', now()) ${boardId ? "AND t.board_id = $1" : ""}`,
+      boardId ? [boardId] : []),
+  ]);
+  const lastBy = new Map(last.rows.map((r) => [r.actor, r.at]));
+  const rows: AgentRow[] = agents.rows.map((a) => {
+    const mine = tasks.filter((t) => t.assigneeId === a.id && t.status === "in_progress");
+    const stale = mine.some((t) => taskCtx(t).leaseExpired);
+    const state: AgentState = stale ? "stale" : mine.some((t) => t.needsInput) ? "blocked" : mine.length ? "working" : "idle";
+    const activity = Array<number>(12).fill(0);
+    for (const b of buckets.rows) if (b.actor === a.id && b.b >= 0 && b.b < 12) activity[11 - b.b] = b.n;
+    return {
+      ...a, state, lastActiveAt: lastBy.get(a.id) ?? null, activity,
+      tasks: mine.map((t) => ({ id: t.id, title: t.title, status: t.status, needsInput: t.needsInput, question: t.question, leaseExpiresAt: t.leaseExpiresAt })),
+    };
+  });
+  const pipeline = Object.fromEntries(STATUSES.map((s) => [s, tasks.filter((t) => t.status === s).length])) as Record<Status, number>;
+  return {
+    agents: rows,
+    kpis: {
+      agentsActive: rows.filter((r) => r.state === "working" || r.state === "blocked").length,
+      agentsTotal: rows.length,
+      waitingOnHuman: tasks.filter((t) => t.status === "proposed" || t.status === "review" || t.needsInput).length,
+      staleLeases: tasks.filter((t) => t.status === "in_progress" && taskCtx(t).leaseExpired).length,
+      doneToday: done.rows[0]?.n ?? 0,
+    },
+    pipeline,
+  };
+}

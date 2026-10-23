@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import {
-  STATUSES, KanbanError, addComment, answerInput, assignTask, explainMoves, heartbeatTask, inbox, requestInput, taskCtx, bus, createAgent, createApiKey, createBoard, renameBoard, setHumanInLoop, createTask, getTask,
+  STATUSES, KanbanError, addComment, answerInput, assignTask, explainMoves, heartbeatTask, inbox, listActivity, overview, requestInput, taskCtx, bus, createAgent, createApiKey, createBoard, renameBoard, setHumanInLoop, createTask, getTask,
   listApiKeys, listBoards, listPrincipals, listTasks, moveTask, revokeApiKey, updatePrincipal, updateTask,
   type Db, type Principal, type Task,
 } from "@kanban/core";
@@ -16,7 +16,7 @@ const createBody = z.object({
 });
 const patchBody = createBody.omit({ confirmed: true, boardId: true }).partial().extend({ expectedVersion: z.number().int().optional() });
 
-export function apiRoutes(db: Db, authMode: "oidc" | "none" = "oidc") {
+export function apiRoutes(db: Db, opts: { authMode: "oidc" | "none"; leaseMinutes: number } = { authMode: "oidc", leaseMinutes: 30 }) {
   const api = new Hono<Env>();
   const me = (c: any) => c.get("principal") as Principal;
   /** Attach what this caller may do next, so the UI can show only valid drop targets. */
@@ -35,7 +35,9 @@ export function apiRoutes(db: Db, authMode: "oidc" | "none" = "oidc") {
     return c.json({ error: "internal" }, 500);
   });
 
-  api.get("/me", (c) => c.json({ ...me(c), authMode }));
+  api.get("/me", (c) => c.json({ ...me(c), authMode: opts.authMode, leaseMinutes: opts.leaseMinutes }));
+  api.get("/overview", async (c) => c.json(await overview(db, c.req.query("boardId"))));
+  api.get("/activity", async (c) => c.json(await listActivity(db, { boardId: c.req.query("boardId"), limit: Number(c.req.query("limit") ?? 30) || 30 })));
   api.get("/boards", async (c) => c.json(await listBoards(db)));
   api.post("/boards", async (c) => {
     const b = z.object({ name: z.string().min(1), humanInLoop: z.boolean().optional() }).parse(await c.req.json());

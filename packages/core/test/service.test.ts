@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import {
-  addComment, setHumanInLoop, answerInput, heartbeatTask, inbox, requestInput, createBoard, listBoards, listTasks, renameBoard, claimTask, confirmTask, createAgent, createApiKey, createTask, getTask, KanbanError,
+  addComment, listActivity, overview, setHumanInLoop, answerInput, heartbeatTask, inbox, requestInput, createBoard, listBoards, listTasks, renameBoard, claimTask, confirmTask, createAgent, createApiKey, createTask, getTask, KanbanError,
   migrate, moveTask, pgliteDb, revokeApiKey, upsertOidcPrincipal, verifyApiKey, type Db, type Principal,
 } from "../src/index.js";
 
@@ -174,5 +174,30 @@ describe("autonomous projects (human-in-the-loop off)", () => {
     await setHumanInLoop(db, admin, b.id, true);
     const q = await createTask(db, agentA, { title: "q", boardId: b.id });
     expect(await code(confirmTask(db, agentA, q.id))).toBe("forbidden");
+  });
+});
+
+describe("supervision views", () => {
+  it("overview reports agent states, kpis and pipeline; activity is newest first", async () => {
+    const mk = async (title: string) => createTask(db, human, { title, confirmed: true });
+    const live = await mk("live"), asking = await mk("asking"), old = await mk("old"), done = await mk("done");
+    await claimTask(db, agentA, live.id);
+    const worker2 = await createAgent(db, admin, { name: "w2" });
+    const worker3 = await createAgent(db, admin, { name: "w3" });
+    await claimTask(db, worker2, asking.id); await requestInput(db, worker2, asking.id, "q?");
+    await claimTask(db, worker3, old.id);
+    await db.query(`UPDATE tasks SET lease_expires_at = now() - interval '2 minutes' WHERE id=$1`, [old.id]);
+    await claimTask(db, agentB, done.id); await moveTask(db, agentB, done.id, "review", { summary: "s" }); await moveTask(db, human, done.id, "done");
+
+    const o = await overview(db);
+    const st = Object.fromEntries(o.agents.map((a) => [a.name, a.state]));
+    expect(st).toMatchObject({ coder: "working", w2: "blocked", w3: "stale", reviewer: "idle" });
+    expect(o.kpis).toMatchObject({ agentsActive: 2, agentsTotal: 4, staleLeases: 1, doneToday: 1, waitingOnHuman: 1 });
+    expect(o.pipeline).toMatchObject({ in_progress: 3, done: 1 });
+    expect(o.agents.find((a) => a.name === "coder")!.activity.reduce((a, b) => a + b, 0)).toBeGreaterThan(0);
+    const feed = await listActivity(db, { limit: 5 });
+    expect(feed).toHaveLength(5);
+    expect(feed[0].id).toBeGreaterThan(feed[1].id);
+    expect(feed[0]).toMatchObject({ actorName: "Hal", type: "moved" });
   });
 });

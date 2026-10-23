@@ -118,7 +118,7 @@ export function createApp({ db, cfg, authenticateBearer, webRoot }: AppDeps) {
   } else app.get("/auth/login", (c) => c.redirect("/"));
 
   for (const mw of authMw) app.use("/api/*", mw);
-  app.route("/api", apiRoutes(db, cfg.authMode));
+  app.route("/api", apiRoutes(db, { authMode: cfg.authMode, leaseMinutes: cfg.leaseMinutes }));
 
   app.use("/mcp", rateLimit(600, 60_000, (c) => c.req.header("authorization")?.slice(-16) ?? ip(c)));
   for (const mw of authMw) app.use("/mcp", mw);

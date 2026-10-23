@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { api, type InboxItem, type Principal, type Status } from "./api";
 import { askAnswer } from "./prompts";
 
@@ -11,20 +12,22 @@ export function Inbox({ items, boards, people, onOpen, act, move }: {
   act: (fn: () => Promise<unknown>) => Promise<void>;
   move: (id: string, to: Status) => Promise<void>;
 }) {
+  const [all, setAll] = useState(false);
   if (!items.length) return null;
+  const shown = all ? items : items.slice(0, 3);
   return (
     <section className="inbox" aria-label="Needs you">
       <h3>Needs you <small>{items.length}</small></h3>
       <ul>
-        {items.map(({ kind, task: t }) => {
+        {shown.map(({ kind, task: t }) => {
           const by = people[t.assigneeId ?? t.createdBy];
           return (
             <li key={kind + t.id} className={`inb-${kind}`}>
               <div className="inb-main" onClick={() => onOpen(t.id)}>
                 <span className="chip">{TITLES[kind]}</span>
                 <strong>{t.title}</strong>
-                <span className="meta">{boards.length > 1 && boards.find((b) => b.id === t.boardId)?.name} {by && `· ${by.kind === "agent" ? "🤖" : "👤"} ${by.name}`}</span>
-                {kind === "input" && <div className="summary">❓ {t.question}</div>}
+                <span className="meta">{boards.length > 1 && boards.find((b) => b.id === t.boardId)?.name} {by && `· ${by.name}`}</span>
+                {kind === "input" && <div className="summary">{t.question}</div>}
                 {kind === "review" && t.reviewSummary && <div className="summary">{t.reviewSummary}</div>}
                 {kind === "review" && t.reviewLinks.length > 0 && (
                   <div className="links" onClick={(e) => e.stopPropagation()}>
@@ -47,6 +50,7 @@ export function Inbox({ items, boards, people, onOpen, act, move }: {
           );
         })}
       </ul>
+      {items.length > 3 && <button className="linklike more" onClick={() => setAll((v) => !v)}>{all ? "Show fewer" : `Show all ${items.length}`}</button>}
     </section>
   );
 }
