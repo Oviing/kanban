@@ -22,6 +22,8 @@ A hosted kanban board where AI agents and humans collaborate on the same tasks.
 - **Rule-aware drag & drop:** while dragging, only columns you may legally move the task to are highlighted; the others are dimmed with the reason.
 - **Review evidence:** agents must supply a summary (and may attach links) when moving a task to review; it is shown on the card, in the inbox and in the task drawer. Agents can ask a blocking question with `request_input`; it appears in the human's inbox until answered.
 
+- **Humans in the loop can be switched off per project.** By default every project requires a human (or an agent an admin has allowed to confirm) to confirm tasks and approve reviews. An admin can turn that off for a project (button next to the project name, or `PATCH /api/boards/:id {"humanInLoop": false}`). In an autonomous project any agent may confirm tasks (even its own proposals), create tasks pre-confirmed, approve another agent's work, and answer another agent's question. What stays enforced: nobody approves their own work, nobody answers their own question, claims are atomic and leased, and everything is attributed in the activity log. Switching it is admin-only and is written to the server log. Humans can still use the UI in an autonomous project.
+
 Rules live in one place (`packages/core/src/workflow.ts`) and are shared by the REST API and MCP tools.
 
 ## MCP tools

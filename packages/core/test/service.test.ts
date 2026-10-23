@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import {
-  addComment, answerInput, heartbeatTask, inbox, requestInput, createBoard, listBoards, listTasks, renameBoard, claimTask, confirmTask, createAgent, createApiKey, createTask, getTask, KanbanError,
+  addComment, setHumanInLoop, answerInput, heartbeatTask, inbox, requestInput, createBoard, listBoards, listTasks, renameBoard, claimTask, confirmTask, createAgent, createApiKey, createTask, getTask, KanbanError,
   migrate, moveTask, pgliteDb, revokeApiKey, upsertOidcPrincipal, verifyApiKey, type Db, type Principal,
 } from "../src/index.js";
 
@@ -137,5 +137,42 @@ describe("inbox & questions", () => {
     expect((await inbox(db, human)).map((i) => i.kind)).not.toContain("input");
     expect((await getTask(db, t.id)).comments.map((c: any) => c.body)).toEqual(["Question: which db?", "Answer: postgres"]);
     expect(await code(answerInput(db, human, t.id, "again"))).toBe("invalid");
+  });
+});
+
+describe("autonomous projects (human-in-the-loop off)", () => {
+  it("only admins can switch it; default is on", async () => {
+    const b = await createBoard(db, human, "Auto");
+    expect(b.humanInLoop).toBe(true);
+    expect(await code(setHumanInLoop(db, human, b.id, false))).toBe("forbidden");
+    expect(await code(createBoard(db, human, "Auto2", false))).toBe("forbidden");
+    expect((await setHumanInLoop(db, admin, b.id, false)).humanInLoop).toBe(false);
+  });
+
+  it("agents confirm, work and approve each other without humans", async () => {
+    const b = await createBoard(db, admin, "Auto", false);
+    // before: gated
+    const gated = await createBoard(db, human, "Gated");
+    const g = await createTask(db, agentA, { title: "g", boardId: gated.id });
+    expect(await code(confirmTask(db, agentA, g.id))).toBe("forbidden");
+
+    const worker = await createAgent(db, admin, { name: "plain" }); // no can_confirm
+    const t = await createTask(db, worker, { title: "auto", boardId: b.id, confirmed: true });
+    expect(t.status).toBe("confirmed"); // agent may skip proposal here
+    const p = await createTask(db, worker, { title: "own", boardId: b.id });
+    expect((await confirmTask(db, worker, p.id)).status).toBe("confirmed"); // even its own
+
+    await claimTask(db, worker, t.id);
+    await requestInput(db, worker, t.id, "q?");
+    expect(await code(answerInput(db, worker, t.id, "me"))).toBe("forbidden"); // not its own question
+    await answerInput(db, agentA, t.id, "go");
+    await moveTask(db, worker, t.id, "review", { summary: "ok" });
+    expect(await code(moveTask(db, worker, t.id, "done"))).toBe("forbidden"); // still no self-approval
+    expect((await moveTask(db, agentA, t.id, "done")).status).toBe("done"); // another agent, no can_confirm
+
+    // switching back restores the gate
+    await setHumanInLoop(db, admin, b.id, true);
+    const q = await createTask(db, agentA, { title: "q", boardId: b.id });
+    expect(await code(confirmTask(db, agentA, q.id))).toBe("forbidden");
   });
 });

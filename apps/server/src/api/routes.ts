@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import {
-  STATUSES, KanbanError, addComment, answerInput, assignTask, explainMoves, heartbeatTask, inbox, requestInput, taskCtx, bus, createAgent, createApiKey, createBoard, renameBoard, createTask, getTask,
+  STATUSES, KanbanError, addComment, answerInput, assignTask, explainMoves, heartbeatTask, inbox, requestInput, taskCtx, bus, createAgent, createApiKey, createBoard, renameBoard, setHumanInLoop, createTask, getTask,
   listApiKeys, listBoards, listPrincipals, listTasks, moveTask, revokeApiKey, updatePrincipal, updateTask,
   type Db, type Principal, type Task,
 } from "@kanban/core";
@@ -37,10 +37,20 @@ export function apiRoutes(db: Db) {
 
   api.get("/me", (c) => c.json(me(c)));
   api.get("/boards", async (c) => c.json(await listBoards(db)));
-  api.post("/boards", async (c) => c.json(await createBoard(db, me(c), z.object({ name: z.string().min(1) }).parse(await c.req.json()).name), 201));
+  api.post("/boards", async (c) => {
+    const b = z.object({ name: z.string().min(1), humanInLoop: z.boolean().optional() }).parse(await c.req.json());
+    return c.json(await createBoard(db, me(c), b.name, b.humanInLoop), 201);
+  });
 
-  api.patch("/boards/:id", async (c) =>
-    c.json(await renameBoard(db, me(c), c.req.param("id"), z.object({ name: z.string().min(1) }).parse(await c.req.json()).name)));
+  api.patch("/boards/:id", async (c) => {
+    const b = z.object({ name: z.string().min(1).optional(), humanInLoop: z.boolean().optional() }).parse(await c.req.json());
+    const id = c.req.param("id");
+    let board = (await listBoards(db)).find((x) => x.id === id);
+    if (!board) throw new KanbanError("not_found", "project not found");
+    if (b.name !== undefined) board = await renameBoard(db, me(c), id, b.name);
+    if (b.humanInLoop !== undefined) board = await setHumanInLoop(db, me(c), id, b.humanInLoop);
+    return c.json(board);
+  });
 
   api.get("/tasks", async (c) => {
     const q = c.req.query();

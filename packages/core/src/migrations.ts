@@ -71,6 +71,9 @@ const MIGRATIONS: string[] = [
   ALTER TABLE tasks ADD COLUMN review_summary text;
   ALTER TABLE tasks ADD COLUMN review_links text[] NOT NULL DEFAULT '{}';
   `,
+  `
+  ALTER TABLE boards ADD COLUMN human_in_loop boolean NOT NULL DEFAULT true;
+  `,
 ];
 
 export async function migrate(db: Db): Promise<void> {

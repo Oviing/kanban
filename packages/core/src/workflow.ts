@@ -18,8 +18,11 @@ export interface Principal {
   canConfirm: boolean;
 }
 
-/** Who may approve work: any human, or an agent explicitly granted can_confirm. */
-export const mayApprove = (p: Principal) => p.kind === "human" || p.canConfirm;
+/**
+ * Who may approve work: any human, or an agent explicitly granted can_confirm.
+ * In an autonomous project (human-in-the-loop switched off) every agent may.
+ */
+export const mayApprove = (p: Principal, autonomous = false) => p.kind === "human" || p.canConfirm || autonomous;
 
 export interface TaskCtx {
   status: Status;
@@ -27,6 +30,8 @@ export interface TaskCtx {
   assigneeId: string | null;
   /** True when an agent's claim lease has run out (humans never hold leases). */
   leaseExpired: boolean;
+  /** The project runs without mandatory human confirmation/approval. */
+  autonomous: boolean;
 }
 
 type Rule = (actor: Principal, t: TaskCtx) => string | null; // null = allowed, string = reason denied
@@ -36,9 +41,9 @@ const isAssignee = (a: Principal, t: TaskCtx) => t.assigneeId === a.id || a.role
 /** Table-driven transitions. `from -> to` maps to a permission check. */
 const RULES: Record<string, Rule> = {
   "proposed->confirmed": (a, t) =>
-    !mayApprove(a)
+    !mayApprove(a, t.autonomous)
       ? "this principal may not confirm tasks"
-      : a.kind === "agent" && t.createdBy === a.id
+      : a.kind === "agent" && t.createdBy === a.id && !t.autonomous
         ? "an agent cannot confirm a task it created"
         : null,
   "confirmed->in_progress": (a, t) =>
@@ -53,12 +58,12 @@ const RULES: Record<string, Rule> = {
   "in_progress->confirmed": (a, t) => (isAssignee(a, t) ? null : "only the assignee can release a task"),
   "in_progress->review": (a, t) => (isAssignee(a, t) ? null : "only the assignee can submit for review"),
   "review->done": (a, t) =>
-    !mayApprove(a)
+    !mayApprove(a, t.autonomous)
       ? "this principal may not approve work"
       : t.assigneeId === a.id
         ? "the assignee cannot approve their own work"
         : null,
-  "review->in_progress": (a) => (mayApprove(a) ? null : "this principal may not request changes"),
+  "review->in_progress": (a, t) => (mayApprove(a, t.autonomous) ? null : "this principal may not request changes"),
 };
 
 export function checkTransition(actor: Principal, task: TaskCtx, to: Status): void {

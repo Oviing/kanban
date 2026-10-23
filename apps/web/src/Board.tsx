@@ -8,7 +8,7 @@ export function Board({ me }: { me: Principal }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [inbox, setInbox] = useState<InboxItem[]>([]);
   const [people, setPeople] = useState<Record<string, Principal>>({});
-  const [boards, setBoards] = useState<{ id: string; name: string }[]>([]);
+  const [boards, setBoards] = useState<{ id: string; name: string; humanInLoop: boolean }[]>([]);
   const [boardId, setBoardId] = useState<string | undefined>(() => localStorage.getItem("kb_board") ?? undefined);
   const [open, setOpen] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +20,7 @@ export function Board({ me }: { me: Principal }) {
   openRef.current = open;
 
   const load = useCallback(async () => {
-    const all = await api<{ id: string; name: string }[]>("/boards");
+    const all = await api<{ id: string; name: string; humanInLoop: boolean }[]>("/boards");
     setBoards(all);
     const id = all.find((b) => b.id === boardId)?.id ?? all[0]?.id;
     if (id !== boardId) setBoardId(id);
@@ -66,6 +66,16 @@ export function Board({ me }: { me: Principal }) {
     if (name && cur) act(() => api(`/boards/${cur.id}`, { method: "PATCH", body: { name } }));
   };
 
+  const current = boards.find((b) => b.id === boardId);
+  const toggleLoop = () => {
+    if (!current) return;
+    const next = !current.humanInLoop;
+    const msg = next
+      ? `Require humans to confirm and approve in "${current.name}" again?`
+      : `Run "${current.name}" autonomously? Agents will be able to confirm tasks and approve each other's work without any human. Agents still cannot approve their own work.`;
+    if (confirm(msg)) act(() => api(`/boards/${current.id}`, { method: "PATCH", body: { humanInLoop: next } }));
+  };
+
   const move = async (id: string, to: Status) => {
     const body: { to: Status; summary?: string } = { to };
     if (to === "review") {
@@ -91,6 +101,10 @@ export function Board({ me }: { me: Principal }) {
         ))}
         {me.kind === "human" && <button onClick={newProject}>+ New project</button>}
         {me.kind === "human" && boards.length > 0 && <button onClick={rename} title="Rename project">✎</button>}
+        {current && !current.humanInLoop && <span className="chip auto" title="No human confirmation or approval is required in this project">🤖 autonomous</span>}
+        {me.kind === "human" && me.role === "admin" && current && (
+          <button onClick={toggleLoop} title="Humans in the loop: confirm/approve gate">{current.humanInLoop ? "Humans in loop: on" : "Humans in loop: off"}</button>
+        )}
       </div>
       <Inbox items={inbox} boards={boards} people={people} onOpen={setOpen} act={act} move={move} />
       <form className="newtask" onSubmit={add}>

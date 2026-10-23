@@ -15,6 +15,7 @@ const WORKFLOW = `Workflow: proposed -> confirmed -> in_progress -> review -> do
 - When finished, move_task to "review" with a summary (required) and links to evidence (PRs, files, logs).
 - If you are blocked or need a decision, call request_input with a clear question; humans see it in their inbox. Use inbox to see what needs your decision (if you are allowed to confirm/approve).
 - You may not approve your own work: review -> done must be done by someone else.
+- Each project has a humanInLoop flag (see list_boards). When it is true, only humans (or agents an admin allowed to confirm) confirm and approve. When false the project is autonomous: any agent may confirm tasks (even its own) and approve other agents' work, and any other agent may answer questions. You still can never approve your own work.
 - Use add_comment to report progress, blockers and questions.`;
 
 export function buildMcpServer(db: Db, me: Principal): McpServer {
