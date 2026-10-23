@@ -4,13 +4,14 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair } from "jose";
 import { serializeSigned } from "hono/utils/cookie";
-import { createAgent, createApiKey, migrate, pgliteDb, upsertOidcPrincipal, type Db, type Principal } from "@kanban/core";
+import { createAgent, createApiKey, verifyApiKey, migrate, pgliteDb, upsertOidcPrincipal, type Db, type Principal } from "@kanban/core";
 import { createApp } from "../src/app.js";
 import { makeBearerAuth } from "../src/auth/bearer.js";
 import type { Config } from "../src/config.js";
 
 const ISS = "https://idp.test/realms/x";
 const cfg: Config = {
+  authMode: "oidc", host: "0.0.0.0", dataDir: "", allowedHosts: ["kanban.test"],
   port: 0, databaseUrl: "", publicUrl: "https://kanban.test", sessionSecret: "s".repeat(40),
   oidc: { issuer: ISS, clientId: "web", audience: "kanban", scope: "openid", allowInsecure: false }, adminEmails: [], leaseMinutes: 30,
 };
@@ -129,5 +130,57 @@ describe("agents collaborating over MCP", () => {
     expect(full.comments[0].authorName).toBe("worker");
     expect(full.events.map((e: any) => e.actorName)).toContain("reviewer");
     expect((await call(w, "list_tasks", { status: "done", label: "docs" })).json).toHaveLength(1);
+  });
+});
+
+describe("AUTH_MODE=none", () => {
+  let open: ReturnType<typeof createApp>;
+  const base = "http://localhost:3000";
+  beforeAll(() => {
+    open = createApp({
+      db,
+      cfg: { ...cfg, authMode: "none", oidc: null, publicUrl: base, allowedHosts: ["localhost:3000", "203.0.113.7:3000"], sessionSecret: "" },
+      authenticateBearer: (t) => verifyApiKey(db, t),
+    });
+  });
+  const json = (path: string, init: RequestInit = {}, url = base) => open.request(url + path, init);
+
+  it("browser acts as the built-in local admin without signing in", async () => {
+    const me = await (await json("/api/me")).json();
+    expect(me).toMatchObject({ kind: "human", role: "admin", authMode: "none" });
+    expect((await json("/api/tasks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: "no-auth task" }) })).status).toBe(201);
+  });
+
+  it("agents identify by X-Agent-Name; MCP works without any token", async () => {
+    const c = new Client({ name: "t", version: "0" });
+    await c.connect(new StreamableHTTPClientTransport(new URL(base + "/mcp"), {
+      fetch: (u, i) => Promise.resolve(open.fetch(new Request(u, i))),
+      requestInit: { headers: { "X-Agent-Name": "Local Coder" } },
+    }));
+    const me = await call(c, "whoami");
+    expect(me.json).toMatchObject({ kind: "agent", name: "Local Coder", canConfirm: false });
+    const t = (await call(c, "create_task", { title: "from local agent" })).json;
+    expect(t.status).toBe("proposed"); // governance rules still apply
+    expect((await call(c, "confirm_task", { taskId: t.id })).isError).toBe(true);
+  });
+
+  it("an invalid API key is still rejected; a valid one wins over the header", async () => {
+    expect((await json("/api/me", { headers: { Authorization: "Bearer kb_nope" } })).status).toBe(401);
+    const a = await createAgent(db, admin, { name: "keyed" });
+    const k = await createApiKey(db, admin, a.id);
+    const me = await (await json("/api/me", { headers: { Authorization: `Bearer ${k.key}`, "X-Agent-Name": "spoof" } })).json();
+    expect(me.name).toBe("keyed");
+  });
+
+  it("blocks DNS rebinding and cross-site requests from the browser", async () => {
+    expect((await json("/api/me", {}, "http://evil.example:3000")).status).toBe(403);
+    expect((await json("/api/me", { headers: { Origin: "https://evil.example" } })).status).toBe(403);
+    expect((await json("/api/me", { headers: { Origin: "null" } })).status).toBe(403);
+    expect((await json("/api/me", { headers: { Origin: base } })).status).toBe(200);
+    expect((await json("/api/me", {}, "http://203.0.113.7:3000")).status).toBe(200); // allowed host (e.g. EC2 IP)
+  });
+
+  it("has no OIDC endpoints", async () => {
+    expect((await json("/.well-known/oauth-protected-resource")).status).toBe(404);
   });
 });

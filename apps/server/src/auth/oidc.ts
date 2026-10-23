@@ -3,12 +3,15 @@ import { getSignedCookie, setSignedCookie, deleteCookie } from "hono/cookie";
 import { Hono } from "hono";
 import { promoteFirstHuman, upsertOidcPrincipal, type Db } from "@kanban/core";
 import type { Config } from "../config.js";
+
+const required = <T,>(v: T | null): T => { if (!v) throw new Error("OIDC is not configured"); return v; };
 import { SESSION_COOKIE, setSession } from "./session.js";
 
 const FLOW_COOKIE = "kb_oidc";
 
 /** Authorization Code + PKCE login for humans. Discovery is lazy so the server can start before the IdP is up. */
-export function oidcRoutes(db: Db, cfg: Config) {
+export function oidcRoutes(db: Db, config: Config) {
+  const cfg = { ...config, oidc: required(config.oidc) };
   const app = new Hono();
   let discovered: Promise<client.Configuration> | undefined;
   const conf = () =>

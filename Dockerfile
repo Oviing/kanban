@@ -16,6 +16,8 @@ RUN npm ci --omit=dev --workspace @kanban/server --workspace @kanban/core --incl
 COPY --from=build /app/packages/core/dist packages/core/dist
 COPY --from=build /app/apps/server/dist apps/server/dist
 COPY --from=build /app/apps/web/dist apps/web/dist
+RUN mkdir -p /app/data && chown node:node /app/data
+VOLUME /app/data
 USER node
 EXPOSE 3000
 HEALTHCHECK CMD node -e "fetch('http://localhost:3000/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"

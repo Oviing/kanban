@@ -36,7 +36,7 @@ export function App() {
         </nav>
         <span className="spacer" />
         <span>{me.name}{me.role === "admin" && " (admin)"}</span>
-        <button onClick={logout}>Sign out</button>
+        {me.authMode === "none" ? <span className="chip warn" title="Running without authentication">no auth</span> : <button onClick={logout}>Sign out</button>}
       </header>
       {page === "board" ? <Board me={me} /> : <Admin />}
     </>

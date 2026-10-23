@@ -60,7 +60,43 @@ npm test                        # unit + integration tests (in-process Postgres 
 
 > The compose stack and Keycloak realm file have not been run (no Docker daemon was available while authoring). The same flows were verified against a real Postgres 16 and a minimal mock OIDC provider.
 
-## Deploy
+## Running without authentication
+
+For a laptop, a private network, or a trusted team box you can switch authentication off completely:
+
+```bash
+npm install && npm run build
+AUTH_MODE=none npm start        # http://localhost:3000, embedded database in ./data, no Postgres or OIDC needed
+```
+
+or `docker compose -f docker-compose.noauth.yml up -d --build`.
+
+What this means:
+
+- **UI:** opens straight to the board as a built-in "Local user" (admin). There is no sign-in.
+- **Agents:** connect to `http://HOST:3000/mcp` with no token. They name themselves with an `X-Agent-Name` header
+  (`claude mcp add --transport http kanban http://localhost:3000/mcp --header "X-Agent-Name: coder"`); without it they appear as `agent`.
+  The name is self-declared and **not verified**, so one agent can impersonate another. API keys still work if you want verified identities.
+- **Rules still apply:** confirm/approve gates, leases, human-in-the-loop per project, and the activity log work exactly as before.
+- **Data:** stored in an embedded Postgres (PGlite) under `DATA_DIR` (default `./data`; the `data` volume in Docker). Single process only. Set `DATABASE_URL` to use a real Postgres instead.
+
+Guard rails (because there is no login): the server binds to `127.0.0.1` by default and refuses any other `HOST` unless you set `ALLOW_NO_AUTH_REMOTE=true`.
+It checks the `Host` and `Origin` headers against `PUBLIC_URL` / `ALLOWED_HOSTS`, so a malicious web page open in your browser cannot drive the board (CSRF) or reach it via DNS rebinding.
+These do **not** protect against people who can reach the port directly: **anyone who can connect can read and change everything.**
+
+### On an EC2 instance
+
+1. Launch an instance (Amazon Linux 2023 / Ubuntu), install Docker, clone this repo.
+2. Pick one access model:
+   - **Private (recommended for no-auth):** keep the default `127.0.0.1:3000:3000` mapping and use an SSH tunnel (`ssh -L 3000:localhost:3000 ec2-host`) or AWS SSM port forwarding, then browse `http://localhost:3000`. Nothing is exposed to the internet.
+   - **VPN / office network:** change the mapping to `"3000:3000"`, set `PUBLIC_URL=http://<private-ip>:3000`, and open port 3000 in the security group **only to your VPN/office CIDR**. Never `0.0.0.0/0`.
+   - **Public internet:** do not use no-auth. Use OIDC (below) behind TLS.
+3. `PUBLIC_URL=http://<address-you-browse-to>:3000 docker compose -f docker-compose.noauth.yml up -d --build`
+4. Back up the `data` volume (or use `DATABASE_URL` pointing at RDS). The instance has no other state.
+
+Agents on the same instance or VPC point their MCP client at `http://<host>:3000/mcp`.
+
+## Deploy (with OIDC)
 
 Build the `Dockerfile` and run it behind TLS with a Postgres database. Notes:
 

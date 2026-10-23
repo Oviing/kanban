@@ -7,7 +7,7 @@ export const COLUMNS: { status: Status; title: string }[] = [
   { status: "done", title: "Done" },
 ];
 
-export interface Principal { id: string; kind: "human" | "agent"; name: string; role: "admin" | "member"; canConfirm: boolean }
+export interface Principal { id: string; kind: "human" | "agent"; name: string; role: "admin" | "member"; canConfirm: boolean; authMode?: "oidc" | "none" }
 export interface Task {
   id: string; boardId: string; title: string; description: string; status: Status; priority: number;
   labels: string[]; createdBy: string; assigneeId: string | null; confirmedBy: string | null; version: number;

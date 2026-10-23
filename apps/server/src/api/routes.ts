@@ -16,7 +16,7 @@ const createBody = z.object({
 });
 const patchBody = createBody.omit({ confirmed: true, boardId: true }).partial().extend({ expectedVersion: z.number().int().optional() });
 
-export function apiRoutes(db: Db) {
+export function apiRoutes(db: Db, authMode: "oidc" | "none" = "oidc") {
   const api = new Hono<Env>();
   const me = (c: any) => c.get("principal") as Principal;
   /** Attach what this caller may do next, so the UI can show only valid drop targets. */
@@ -35,7 +35,7 @@ export function apiRoutes(db: Db) {
     return c.json({ error: "internal" }, 500);
   });
 
-  api.get("/me", (c) => c.json(me(c)));
+  api.get("/me", (c) => c.json({ ...me(c), authMode }));
   api.get("/boards", async (c) => c.json(await listBoards(db)));
   api.post("/boards", async (c) => {
     const b = z.object({ name: z.string().min(1), humanInLoop: z.boolean().optional() }).parse(await c.req.json());
