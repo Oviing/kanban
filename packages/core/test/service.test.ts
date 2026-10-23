@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import {
-  addComment, claimTask, confirmTask, createAgent, createApiKey, createTask, getTask, KanbanError,
+  addComment, createBoard, listBoards, listTasks, renameBoard, claimTask, confirmTask, createAgent, createApiKey, createTask, getTask, KanbanError,
   migrate, moveTask, pgliteDb, revokeApiKey, upsertOidcPrincipal, verifyApiKey, type Db, type Principal,
 } from "../src/index.js";
 
@@ -71,5 +71,19 @@ describe("api keys", () => {
   });
   it("only admins manage keys", async () => {
     expect(await code(createApiKey(db, human, agentA.id))).toBe("forbidden");
+  });
+});
+
+describe("projects", () => {
+  it("tasks are scoped to their project; only humans manage projects", async () => {
+    const a = await createBoard(db, human, "Alpha");
+    const b = await createBoard(db, human, "Beta");
+    await createTask(db, agentA, { title: "in a", boardId: a.id });
+    await createTask(db, agentA, { title: "in b", boardId: b.id });
+    expect((await listTasks(db, { boardId: a.id })).map((t) => t.title)).toEqual(["in a"]);
+    expect(await code(createBoard(db, agentA, "Nope"))).toBe("forbidden");
+    expect((await renameBoard(db, human, a.id, "Alpha 2")).name).toBe("Alpha 2");
+    expect((await listBoards(db)).map((x) => x.name)).toEqual(expect.arrayContaining(["Alpha 2", "Beta"]));
+    expect(await code(createTask(db, agentA, { title: "x", boardId: "00000000-0000-0000-0000-000000000000" }))).toBe("not_found");
   });
 });

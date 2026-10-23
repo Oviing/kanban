@@ -30,7 +30,7 @@ export function buildMcpServer(db: Db, me: Principal): McpServer {
     server.registerTool(name, { description, inputSchema: shape }, (a: any) => run(() => fn(a)));
 
   tool("whoami", "Return the identity you are acting as.", {}, async () => me);
-  tool("list_boards", "List boards.", {}, () => listBoards(db));
+  tool("list_boards", "List projects (boards). Pass a project id as boardId to create_task / list_tasks to work within it.", {}, () => listBoards(db));
   tool("list_principals", "List humans and agents (ids are needed for assign_task).", {}, () => listPrincipals(db));
   tool(
     "list_tasks",
@@ -42,7 +42,7 @@ export function buildMcpServer(db: Db, me: Principal): McpServer {
   tool(
     "create_task",
     "Create a task. It starts as 'proposed' until confirmed.",
-    { title: z.string().min(1), description: z.string().optional(), priority: z.number().int().min(0).max(4).optional(), labels: z.array(z.string()).optional(), boardId: id.optional() },
+    { title: z.string().min(1), description: z.string().optional(), priority: z.number().int().min(0).max(4).optional(), labels: z.array(z.string()).optional(), boardId: id.optional().describe("Project to create the task in; defaults to the first project") },
     (a) => createTask(db, me, a),
   );
   tool(

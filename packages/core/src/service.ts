@@ -147,8 +147,17 @@ export async function listBoards(db: Db) {
 }
 
 export async function createBoard(db: Db, actor: Principal, name: string) {
-  if (actor.kind !== "human") throw new KanbanError("forbidden", "only humans create boards");
-  const { rows } = await db.query(`INSERT INTO boards (name) VALUES ($1) RETURNING id, name`, [name]);
+  if (actor.kind !== "human") throw new KanbanError("forbidden", "only humans create projects");
+  if (!name?.trim()) throw new KanbanError("invalid", "name is required");
+  const { rows } = await db.query(`INSERT INTO boards (name) VALUES ($1) RETURNING id, name`, [name.trim()]);
+  return rows[0] as { id: string; name: string };
+}
+
+export async function renameBoard(db: Db, actor: Principal, id: string, name: string) {
+  if (actor.kind !== "human") throw new KanbanError("forbidden", "only humans manage projects");
+  if (!name?.trim()) throw new KanbanError("invalid", "name is required");
+  const { rows } = await db.query(`UPDATE boards SET name=$2 WHERE id=$1 RETURNING id, name`, [id, name.trim()]);
+  if (!rows[0]) throw new KanbanError("not_found", "project not found");
   return rows[0] as { id: string; name: string };
 }
 
@@ -192,6 +201,8 @@ export async function createTask(db: Db, actor: Principal, i: CreateTaskInput): 
   if (!i.title?.trim()) throw new KanbanError("invalid", "title is required");
   const task = await db.tx(async (t) => {
     const boardId = i.boardId ?? (await ensureDefaultBoard(t)).id;
+    if (i.boardId && !(await t.query(`SELECT 1 FROM boards WHERE id=$1`, [boardId])).rows[0])
+      throw new KanbanError("not_found", "project not found");
     const preConfirm = !!i.confirmed && actor.kind === "human";
     const { rows } = await t.query<Task>(
       `INSERT INTO tasks (board_id, title, description, priority, labels, created_by, status, confirmed_by, confirmed_at)

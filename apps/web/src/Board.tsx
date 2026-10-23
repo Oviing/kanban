@@ -5,7 +5,8 @@ import { TaskDrawer } from "./TaskDrawer";
 export function Board({ me }: { me: Principal }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [people, setPeople] = useState<Record<string, Principal>>({});
-  const [boardId, setBoardId] = useState<string>();
+  const [boards, setBoards] = useState<{ id: string; name: string }[]>([]);
+  const [boardId, setBoardId] = useState<string | undefined>(() => localStorage.getItem("kb_board") ?? undefined);
   const [open, setOpen] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -14,9 +15,10 @@ export function Board({ me }: { me: Principal }) {
   openRef.current = open;
 
   const load = useCallback(async () => {
-    const boards = await api<{ id: string }[]>("/boards");
-    const id = boardId ?? boards[0]?.id;
-    setBoardId(id);
+    const all = await api<{ id: string; name: string }[]>("/boards");
+    setBoards(all);
+    const id = all.find((b) => b.id === boardId)?.id ?? all[0]?.id;
+    if (id !== boardId) setBoardId(id);
     const [t, p] = await Promise.all([api<Task[]>(`/tasks${id ? `?boardId=${id}` : ""}`), api<Principal[]>("/principals")]);
     setTasks(t);
     setPeople(Object.fromEntries(p.map((x) => [x.id, x])));
@@ -41,10 +43,28 @@ export function Board({ me }: { me: Principal }) {
     act(async () => { await api("/tasks", { method: "POST", body: { title, boardId, confirmed: me.kind === "human" } }); setTitle(""); });
   };
 
+  const select = (id: string) => { localStorage.setItem("kb_board", id); setBoardId(id); setOpen(null); };
+  const newProject = () => {
+    const name = prompt("Project name")?.trim();
+    if (name) act(async () => select((await api<{ id: string }>("/boards", { method: "POST", body: { name } })).id));
+  };
+  const rename = () => {
+    const cur = boards.find((b) => b.id === boardId);
+    const name = prompt("Rename project", cur?.name)?.trim();
+    if (name && cur) act(() => api(`/boards/${cur.id}`, { method: "PATCH", body: { name } }));
+  };
+
   const move = (id: string, to: Status) => act(() => api(`/tasks/${id}/move`, { method: "POST", body: { to } }));
 
   return (
     <main>
+      <div className="projects">
+        {boards.map((b) => (
+          <button key={b.id} className={b.id === boardId ? "active" : ""} onClick={() => select(b.id)}>{b.name}</button>
+        ))}
+        {me.kind === "human" && <button onClick={newProject}>+ New project</button>}
+        {me.kind === "human" && boards.length > 0 && <button onClick={rename} title="Rename project">✎</button>}
+      </div>
       <form className="newtask" onSubmit={add}>
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="New task (humans create it pre-confirmed)…" />
         <button className="primary">Add</button>

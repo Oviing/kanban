@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import {
-  STATUSES, KanbanError, addComment, assignTask, bus, createAgent, createApiKey, createBoard, createTask, getTask,
+  STATUSES, KanbanError, addComment, assignTask, bus, createAgent, createApiKey, createBoard, renameBoard, createTask, getTask,
   listApiKeys, listBoards, listPrincipals, listTasks, moveTask, revokeApiKey, updatePrincipal, updateTask,
   type Db, type Principal,
 } from "@kanban/core";
@@ -33,6 +33,9 @@ export function apiRoutes(db: Db) {
   api.get("/me", (c) => c.json(me(c)));
   api.get("/boards", async (c) => c.json(await listBoards(db)));
   api.post("/boards", async (c) => c.json(await createBoard(db, me(c), z.object({ name: z.string().min(1) }).parse(await c.req.json()).name), 201));
+
+  api.patch("/boards/:id", async (c) =>
+    c.json(await renameBoard(db, me(c), c.req.param("id"), z.object({ name: z.string().min(1) }).parse(await c.req.json()).name)));
 
   api.get("/tasks", async (c) => {
     const q = c.req.query();

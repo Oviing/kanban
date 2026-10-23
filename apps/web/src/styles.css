@@ -28,3 +28,4 @@ h3 small { color:var(--muted); font-weight:400; }
 .fresh { background:#e8f7ee; color:#14532d; padding:10px; border-radius:6px; } .fresh code { display:block; margin-top:4px; user-select:all; word-break:break-all; }
 .hint { color:var(--muted); }
 @media (max-width: 800px) { .columns { grid-template-columns:repeat(5,80vw); } }
+.projects { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
