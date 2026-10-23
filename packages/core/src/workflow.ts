@@ -25,6 +25,8 @@ export interface TaskCtx {
   status: Status;
   createdBy: string;
   assigneeId: string | null;
+  /** True when an agent's claim lease has run out (humans never hold leases). */
+  leaseExpired: boolean;
 }
 
 type Rule = (actor: Principal, t: TaskCtx) => string | null; // null = allowed, string = reason denied
@@ -41,6 +43,13 @@ const RULES: Record<string, Rule> = {
         : null,
   "confirmed->in_progress": (a, t) =>
     t.assigneeId && t.assigneeId !== a.id ? "task is already claimed" : null,
+  // Take over a stale claim: only possible once the holder's lease has expired.
+  "in_progress->in_progress": (a, t) =>
+    t.assigneeId === a.id
+      ? "you already hold this task"
+      : !t.leaseExpired
+        ? "held by another assignee whose lease has not expired"
+        : null,
   "in_progress->confirmed": (a, t) => (isAssignee(a, t) ? null : "only the assignee can release a task"),
   "in_progress->review": (a, t) => (isAssignee(a, t) ? null : "only the assignee can submit for review"),
   "review->done": (a, t) =>
@@ -63,3 +72,21 @@ export const allowedTargets = (from: Status) =>
   Object.keys(RULES)
     .filter((k) => k.startsWith(`${from}->`))
     .map((k) => k.split("->")[1] as Status);
+
+export interface MoveOption {
+  to: Status;
+  ok: boolean;
+  reason?: string;
+}
+
+/** For every status: may this actor move the task there, and if not, why not. Drives rule-aware drag & drop. */
+export function explainMoves(actor: Principal, task: TaskCtx): MoveOption[] {
+  return STATUSES.map((to) => {
+    try {
+      checkTransition(actor, task, to);
+      return { to, ok: true };
+    } catch (e) {
+      return { to, ok: false, reason: (e as Error).message };
+    }
+  });
+}

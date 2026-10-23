@@ -12,7 +12,7 @@ import type { Config } from "../src/config.js";
 const ISS = "https://idp.test/realms/x";
 const cfg: Config = {
   port: 0, databaseUrl: "", publicUrl: "https://kanban.test", sessionSecret: "s".repeat(40),
-  oidc: { issuer: ISS, clientId: "web", audience: "kanban", scope: "openid", allowInsecure: false }, adminEmails: [],
+  oidc: { issuer: ISS, clientId: "web", audience: "kanban", scope: "openid", allowInsecure: false }, adminEmails: [], leaseMinutes: 30,
 };
 
 let db: Db, app: ReturnType<typeof createApp>, admin: Principal, human: Principal;
@@ -120,7 +120,8 @@ describe("agents collaborating over MCP", () => {
     expect((await call(w, "claim_task", { taskId: t.id })).json.assigneeId).toBe(worker.id);
     expect((await call(r, "claim_task", { taskId: t.id })).isError).toBe(true);
     await call(w, "add_comment", { taskId: t.id, body: "done, see PR" });
-    await call(w, "move_task", { taskId: t.id, to: "review" });
+    expect((await call(w, "move_task", { taskId: t.id, to: "review" })).text).toMatch(/summary/);
+    await call(w, "move_task", { taskId: t.id, to: "review", summary: "docs written", links: ["https://x/pr/9"] });
     expect((await call(w, "move_task", { taskId: t.id, to: "done" })).text).toMatch(/forbidden/);
     expect((await call(r, "move_task", { taskId: t.id, to: "done" })).json.status).toBe("done");
 

@@ -11,7 +11,15 @@ export interface Principal { id: string; kind: "human" | "agent"; name: string; 
 export interface Task {
   id: string; boardId: string; title: string; description: string; status: Status; priority: number;
   labels: string[]; createdBy: string; assigneeId: string | null; confirmedBy: string | null; version: number;
+  needsInput: boolean; question: string | null; leaseExpiresAt: string | null;
+  reviewSummary: string | null; reviewLinks: string[];
+  /** What the current user may do with this task: target status -> allowed (+ reason if not). */
+  moves: Record<Status, { ok: boolean; reason?: string }>;
 }
+export type InboxKind = "confirm" | "review" | "input" | "stale";
+export interface InboxItem { kind: InboxKind; task: Task }
+export const isStale = (t: Task) => t.status === "in_progress" && !!t.leaseExpiresAt && new Date(t.leaseExpiresAt).getTime() < Date.now();
+export const isLive = (t: Task) => t.status === "in_progress" && !!t.leaseExpiresAt && !isStale(t);
 export interface TaskDetail extends Task {
   comments: { id: string; body: string; createdAt: string; authorName: string; authorKind: string }[];
   events: { id: number; type: string; payload: any; createdAt: string; actorName: string; actorKind: string }[];

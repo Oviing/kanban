@@ -64,6 +64,13 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX events_task ON events (task_id, id);
   `,
+  `
+  ALTER TABLE tasks ADD COLUMN needs_input boolean NOT NULL DEFAULT false;
+  ALTER TABLE tasks ADD COLUMN question text;
+  ALTER TABLE tasks ADD COLUMN lease_expires_at timestamptz;
+  ALTER TABLE tasks ADD COLUMN review_summary text;
+  ALTER TABLE tasks ADD COLUMN review_links text[] NOT NULL DEFAULT '{}';
+  `,
 ];
 
 export async function migrate(db: Db): Promise<void> {

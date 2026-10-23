@@ -13,6 +13,7 @@ export interface Config {
     allowInsecure: boolean;
   };
   adminEmails: string[];
+  leaseMinutes: number;
 }
 
 function req(env: NodeJS.ProcessEnv, k: string): string {
@@ -38,6 +39,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       scope: env.OIDC_SCOPE ?? "openid profile email",
       allowInsecure: env.OIDC_ALLOW_INSECURE === "true",
     },
+    leaseMinutes: Number(env.LEASE_MINUTES ?? 30),
     adminEmails: (env.OIDC_ADMIN_EMAILS ?? "").split(",").map((s) => s.trim()).filter(Boolean),
   };
 }

@@ -2,9 +2,9 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import {
-  STATUSES, KanbanError, addComment, assignTask, bus, createAgent, createApiKey, createBoard, renameBoard, createTask, getTask,
+  STATUSES, KanbanError, addComment, answerInput, assignTask, explainMoves, heartbeatTask, inbox, requestInput, taskCtx, bus, createAgent, createApiKey, createBoard, renameBoard, createTask, getTask,
   listApiKeys, listBoards, listPrincipals, listTasks, moveTask, revokeApiKey, updatePrincipal, updateTask,
-  type Db, type Principal,
+  type Db, type Principal, type Task,
 } from "@kanban/core";
 
 export type Env = { Variables: { principal: Principal; via: "session" | "bearer" } };
@@ -19,6 +19,11 @@ const patchBody = createBody.omit({ confirmed: true, boardId: true }).partial().
 export function apiRoutes(db: Db) {
   const api = new Hono<Env>();
   const me = (c: any) => c.get("principal") as Principal;
+  /** Attach what this caller may do next, so the UI can show only valid drop targets. */
+  const withMoves = <T extends Task>(p: Principal, t: T) => ({
+    ...t,
+    moves: Object.fromEntries(explainMoves(p, taskCtx(t)).map((m) => [m.to, { ok: m.ok, reason: m.reason }])),
+  });
 
   api.onError((e, c) => {
     if (e instanceof KanbanError) {
@@ -39,13 +44,22 @@ export function apiRoutes(db: Db) {
 
   api.get("/tasks", async (c) => {
     const q = c.req.query();
-    return c.json(await listTasks(db, { boardId: q.boardId, status: q.status ? status.parse(q.status) : undefined, assigneeId: q.assigneeId, label: q.label }));
+    const tasks = await listTasks(db, { boardId: q.boardId, status: q.status ? status.parse(q.status) : undefined, assigneeId: q.assigneeId, label: q.label });
+    return c.json(tasks.map((t) => withMoves(me(c), t)));
   });
   api.post("/tasks", async (c) => c.json(await createTask(db, me(c), createBody.parse(await c.req.json())), 201));
-  api.get("/tasks/:id", async (c) => c.json(await getTask(db, c.req.param("id"))));
+  api.get("/tasks/:id", async (c) => c.json(withMoves(me(c), await getTask(db, c.req.param("id")))));
+  api.get("/inbox", async (c) => c.json((await inbox(db, me(c))).map((i) => ({ kind: i.kind, task: withMoves(me(c), i.task) }))));
   api.patch("/tasks/:id", async (c) => c.json(await updateTask(db, me(c), c.req.param("id"), patchBody.parse(await c.req.json()))));
-  api.post("/tasks/:id/move", async (c) =>
-    c.json(await moveTask(db, me(c), c.req.param("id"), status.parse((await c.req.json()).to))));
+  api.post("/tasks/:id/move", async (c) => {
+    const b = z.object({ to: status, summary: z.string().optional(), links: z.array(z.string()).optional() }).parse(await c.req.json());
+    return c.json(await moveTask(db, me(c), c.req.param("id"), b.to, { summary: b.summary, links: b.links }));
+  });
+  api.post("/tasks/:id/heartbeat", async (c) => c.json(await heartbeatTask(db, me(c), c.req.param("id"))));
+  api.post("/tasks/:id/input", async (c) =>
+    c.json(await requestInput(db, me(c), c.req.param("id"), z.object({ question: z.string().min(1) }).parse(await c.req.json()).question)));
+  api.post("/tasks/:id/answer", async (c) =>
+    c.json(await answerInput(db, me(c), c.req.param("id"), z.object({ answer: z.string().min(1) }).parse(await c.req.json()).answer)));
   api.post("/tasks/:id/assign", async (c) =>
     c.json(await assignTask(db, me(c), c.req.param("id"), z.string().uuid().nullable().parse((await c.req.json()).assigneeId))));
   api.post("/tasks/:id/comments", async (c) =>

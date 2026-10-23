@@ -1,7 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
 import { EventEmitter } from "node:events";
 import type { Db } from "./db.js";
-import { KanbanError, checkTransition, STATUSES, type Principal, type Status } from "./workflow.js";
+import { KanbanError, checkTransition, mayApprove, explainMoves, STATUSES, type Principal, type Status, type TaskCtx } from "./workflow.js";
+
+/** How long an agent's claim stays valid without a sign of life (comment, update, heartbeat). */
+let leaseSeconds = 30 * 60;
+export const setLeaseMinutes = (m: number) => void (leaseSeconds = Math.round(m * 60));
 
 /** In-process change feed (one instance). The server forwards these to SSE clients. */
 export const bus = new EventEmitter();
@@ -20,13 +24,27 @@ export interface Task {
   confirmedBy: string | null;
   confirmedAt: string | null;
   version: number;
+  needsInput: boolean;
+  question: string | null;
+  leaseExpiresAt: string | null;
+  reviewSummary: string | null;
+  reviewLinks: string[];
   createdAt: string;
   updatedAt: string;
 }
 
+export const taskCtx = (t: Task): TaskCtx => ({
+  status: t.status,
+  createdBy: t.createdBy,
+  assigneeId: t.assigneeId,
+  leaseExpired: !!t.leaseExpiresAt && new Date(t.leaseExpiresAt).getTime() < Date.now(),
+});
+
 const TASK_COLS = `id, board_id AS "boardId", title, description, status, priority, labels,
   created_by AS "createdBy", assignee_id AS "assigneeId", confirmed_by AS "confirmedBy",
-  confirmed_at AS "confirmedAt", version, created_at AS "createdAt", updated_at AS "updatedAt"`;
+  confirmed_at AS "confirmedAt", version,
+  needs_input AS "needsInput", question, lease_expires_at AS "leaseExpiresAt",
+  review_summary AS "reviewSummary", review_links AS "reviewLinks", created_at AS "createdAt", updated_at AS "updatedAt"`;
 
 const PRINCIPAL_COLS = `id, kind, name, role, can_confirm AS "canConfirm"`;
 
@@ -179,6 +197,15 @@ async function logEvent(db: Db, taskId: string, actor: Principal, type: string, 
   ]);
 }
 
+/** Any activity by the current agent assignee counts as a sign of life and renews the lease. */
+async function touchLease(db: Db, taskId: string, actor: Principal) {
+  await db.query(
+    `UPDATE tasks SET lease_expires_at = now() + make_interval(secs => $3)
+     WHERE id=$1 AND status='in_progress' AND assignee_id=$2 AND lease_expires_at IS NOT NULL`,
+    [taskId, actor.id, leaseSeconds],
+  );
+}
+
 const notify = (boardId: string, taskId: string, type: string) => bus.emit("change", { boardId, taskId, type });
 
 async function load(db: Db, id: string, lock = false): Promise<Task> {
@@ -284,6 +311,7 @@ export async function updateTask(
        WHERE id=$1 RETURNING ${TASK_COLS}`,
       [id, i.title?.trim() || null, i.description ?? null, i.priority ?? null, i.labels ?? null],
     );
+    await touchLease(t, id, actor);
     await logEvent(t, id, actor, "updated", { fields: Object.keys(i).filter((k) => k !== "expectedVersion") });
     return rows[0];
   });
@@ -291,29 +319,118 @@ export async function updateTask(
   return task;
 }
 
-/** Move a task along the workflow. Side effects (assignee, confirmation stamp) depend on the target status. */
-export async function moveTask(db: Db, actor: Principal, id: string, to: Status): Promise<Task> {
+export interface MoveOptions {
+  /** What was done; required from agents when submitting for review. */
+  summary?: string;
+  /** Evidence: PRs, files, logs. */
+  links?: string[];
+}
+
+/** Move a task along the workflow. Side effects (assignee, lease, evidence) depend on the target status. */
+export async function moveTask(db: Db, actor: Principal, id: string, to: Status, opts: MoveOptions = {}): Promise<Task> {
   const task = await db.tx(async (t) => {
     const cur = await load(t, id, true);
-    checkTransition(actor, cur, to);
-    const claim = to === "in_progress" && cur.status === "confirmed";
+    checkTransition(actor, taskCtx(cur), to);
+    if (to === "review" && actor.kind === "agent" && !opts.summary?.trim())
+      throw new KanbanError("invalid", "a summary of the work is required when submitting for review");
+    const takeover = cur.status === "in_progress" && to === "in_progress";
+    const claim = to === "in_progress" && (cur.status === "confirmed" || takeover);
     const release = to === "confirmed" && cur.status === "in_progress";
     const confirm = to === "confirmed" && cur.status === "proposed";
+    const newAssignee = claim ? actor.id : release ? null : cur.assigneeId;
+    let leased = false;
+    if (to === "in_progress" && newAssignee) {
+      const kind = claim ? actor.kind : (await t.query<{ kind: string }>(`SELECT kind FROM principals WHERE id=$1`, [newAssignee])).rows[0]?.kind;
+      leased = kind === "agent";
+    }
     const { rows } = await t.query<Task>(
       `UPDATE tasks SET status=$2,
-         assignee_id = CASE WHEN $3 THEN $1::uuid WHEN $4 THEN NULL ELSE assignee_id END,
-         confirmed_by = CASE WHEN $5 THEN $1::uuid ELSE confirmed_by END,
-         confirmed_at = CASE WHEN $5 THEN now() ELSE confirmed_at END,
+         assignee_id = $3::uuid,
+         confirmed_by = CASE WHEN $4 THEN $1::uuid ELSE confirmed_by END,
+         confirmed_at = CASE WHEN $4 THEN now() ELSE confirmed_at END,
+         lease_expires_at = CASE WHEN $5 THEN now() + make_interval(secs => $6) ELSE NULL END,
+         review_summary = CASE WHEN $2 = 'review' THEN $7::text ELSE review_summary END,
+         review_links = CASE WHEN $2 = 'review' THEN $8::text[] ELSE review_links END,
+         needs_input = CASE WHEN $2 IN ('done','confirmed') THEN false ELSE needs_input END,
          version=version+1, updated_at=now()
-       WHERE id=$6 RETURNING ${TASK_COLS}`,
-      [actor.id, to, claim, release, confirm, id],
+       WHERE id=$9 RETURNING ${TASK_COLS}`,
+      [actor.id, to, newAssignee, confirm, leased, leaseSeconds, opts.summary?.trim() ?? null, opts.links ?? [], id],
     );
-    const type = confirm ? "confirmed" : claim ? "claimed" : release ? "released" : "moved";
-    await logEvent(t, id, actor, type, { from: cur.status, to });
+    const type = confirm ? "confirmed" : takeover ? "taken_over" : claim ? "claimed" : release ? "released" : "moved";
+    await logEvent(t, id, actor, type, {
+      from: cur.status, to,
+      ...(takeover ? { previousAssigneeId: cur.assigneeId } : {}),
+      ...(to === "review" && opts.summary ? { summary: opts.summary.trim() } : {}),
+    });
     return rows[0];
   });
   notify(task.boardId, id, "moved");
   return task;
+}
+
+/** Agents call this while working on a long step so the claim does not look abandoned. */
+export async function heartbeatTask(db: Db, actor: Principal, id: string): Promise<Task> {
+  const cur = await load(db, id);
+  if (cur.status !== "in_progress" || cur.assigneeId !== actor.id)
+    throw new KanbanError("invalid", "you do not hold this task");
+  await touchLease(db, id, actor);
+  return load(db, id);
+}
+
+export async function requestInput(db: Db, actor: Principal, id: string, question: string): Promise<Task> {
+  if (!question?.trim()) throw new KanbanError("invalid", "question is required");
+  const task = await db.tx(async (t) => {
+    const cur = await load(t, id, true);
+    if (cur.status === "done") throw new KanbanError("invalid", "task is done");
+    const { rows } = await t.query<Task>(
+      `UPDATE tasks SET needs_input=true, question=$2, version=version+1, updated_at=now() WHERE id=$1 RETURNING ${TASK_COLS}`,
+      [id, question.trim()],
+    );
+    await t.query(`INSERT INTO comments (task_id, author_id, body) VALUES ($1,$2,$3)`, [id, actor.id, `Question: ${question.trim()}`]);
+    await touchLease(t, id, actor);
+    await logEvent(t, id, actor, "input_requested", { question: question.trim() });
+    return rows[0];
+  });
+  notify(task.boardId, id, "input_requested");
+  return task;
+}
+
+export async function answerInput(db: Db, actor: Principal, id: string, answer: string): Promise<Task> {
+  if (!answer?.trim()) throw new KanbanError("invalid", "answer is required");
+  if (!mayApprove(actor)) throw new KanbanError("forbidden", "this principal may not answer questions");
+  const task = await db.tx(async (t) => {
+    const cur = await load(t, id, true);
+    if (!cur.needsInput) throw new KanbanError("invalid", "no question is pending on this task");
+    const { rows } = await t.query<Task>(
+      `UPDATE tasks SET needs_input=false, version=version+1, updated_at=now() WHERE id=$1 RETURNING ${TASK_COLS}`,
+      [id],
+    );
+    await t.query(`INSERT INTO comments (task_id, author_id, body) VALUES ($1,$2,$3)`, [id, actor.id, `Answer: ${answer.trim()}`]);
+    await logEvent(t, id, actor, "input_answered");
+    return rows[0];
+  });
+  notify(task.boardId, id, "input_answered");
+  return task;
+}
+
+export type InboxKind = "confirm" | "review" | "input" | "stale";
+export interface InboxItem { kind: InboxKind; task: Task }
+
+/** Everything currently waiting on this principal to make a decision. */
+export async function inbox(db: Db, actor: Principal): Promise<InboxItem[]> {
+  const { rows } = await db.query<Task>(
+    `SELECT ${TASK_COLS} FROM tasks WHERE status <> 'done' AND (status IN ('proposed','review') OR needs_input OR lease_expires_at < now())
+     ORDER BY priority DESC, updated_at`,
+  );
+  const can = (t: Task, to: Status) => explainMoves(actor, taskCtx(t)).find((m) => m.to === to)!.ok;
+  const out: InboxItem[] = [];
+  for (const t of rows) {
+    if (t.status === "proposed" && can(t, "confirmed")) out.push({ kind: "confirm", task: t });
+    if (t.status === "review" && can(t, "done")) out.push({ kind: "review", task: t });
+    if (t.needsInput && mayApprove(actor)) out.push({ kind: "input", task: t });
+    if (t.status === "in_progress" && taskCtx(t).leaseExpired && actor.kind === "human") out.push({ kind: "stale", task: t });
+  }
+  return out;
 }
 
 export const confirmTask = (db: Db, actor: Principal, id: string) => moveTask(db, actor, id, "confirmed");
@@ -354,6 +471,7 @@ export async function addComment(db: Db, actor: Principal, taskId: string, body:
        RETURNING id, body, created_at AS "createdAt"`,
       [taskId, actor.id, body.trim()],
     );
+    await touchLease(t, taskId, actor);
     await logEvent(t, taskId, actor, "commented");
     return { comment: rows[0], boardId: task.boardId };
   });

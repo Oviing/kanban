@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, type Principal, type TaskDetail } from "./api";
+import { api, isStale, type Principal, type TaskDetail } from "./api";
+import { askAnswer, askSummary } from "./prompts";
 
 const NEXT: Record<string, { to: string; label: string }[]> = {
   proposed: [{ to: "confirmed", label: "Confirm" }],
@@ -36,10 +37,29 @@ export function TaskDrawer({ id, me, people, rev, onClose, onChange }: {
         onBlur={(e) => e.target.value !== t.description && run(() => api(`/tasks/${id}`, { method: "PATCH", body: { description: e.target.value, expectedVersion: t.version } }))}
       />
       {error && <div className="error">{error}</div>}
+      {t.needsInput && <div className="ask-box">❓ {t.question}</div>}
+      {isStale(t) && <div className="stale-box">Claim lease expired — the assignee has been silent since {new Date(t.leaseExpiresAt!).toLocaleTimeString()}.</div>}
+      {t.reviewSummary && (
+        <div className="evidence">
+          <h4>Submitted for review</h4>
+          <p>{t.reviewSummary}</p>
+          {t.reviewLinks.map((l) => <div key={l}><a href={/^https?:/.test(l) ? l : undefined} target="_blank" rel="noreferrer noopener">{l}</a></div>)}
+        </div>
+      )}
       <div className="actions">
-        {NEXT[t.status].map((a) => (
-          <button key={a.to + a.label} className="primary" onClick={() => run(() => api(`/tasks/${id}/move`, { method: "POST", body: { to: a.to } }))}>{a.label}</button>
+        {NEXT[t.status].filter((a) => t.moves?.[a.to as keyof typeof t.moves]?.ok).map((a) => (
+          <button key={a.to + a.label} className="primary" onClick={() => {
+            const body: Record<string, unknown> = { to: a.to };
+            if (a.to === "review") { const s = askSummary(); if (s === null) return; if (s) body.summary = s; }
+            run(() => api(`/tasks/${id}/move`, { method: "POST", body }));
+          }}>{a.label}</button>
         ))}
+        {isStale(t) && t.moves.in_progress.ok && (
+          <button onClick={() => run(() => api(`/tasks/${id}/move`, { method: "POST", body: { to: "in_progress" } }))}>Take over (stale)</button>
+        )}
+        {t.needsInput && (me.kind === "human" || me.canConfirm) && (
+          <button className="primary" onClick={() => { const a = askAnswer(t.question)?.trim(); if (a) run(() => api(`/tasks/${id}/answer`, { method: "POST", body: { answer: a } })); }}>Answer question</button>
+        )}
         {!t.assigneeId && t.status !== "proposed" && t.status !== "done" && (
           <button onClick={() => run(() => api(`/tasks/${id}/assign`, { method: "POST", body: { assigneeId: me.id } }))}>Assign to me</button>
         )}

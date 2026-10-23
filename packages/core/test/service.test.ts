@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import {
-  addComment, createBoard, listBoards, listTasks, renameBoard, claimTask, confirmTask, createAgent, createApiKey, createTask, getTask, KanbanError,
+  addComment, answerInput, heartbeatTask, inbox, requestInput, createBoard, listBoards, listTasks, renameBoard, claimTask, confirmTask, createAgent, createApiKey, createTask, getTask, KanbanError,
   migrate, moveTask, pgliteDb, revokeApiKey, upsertOidcPrincipal, verifyApiKey, type Db, type Principal,
 } from "../src/index.js";
 
@@ -36,12 +36,14 @@ describe("workflow", () => {
   it("full lifecycle with separation of duties", async () => {
     const t = await createTask(db, human, { title: "t", confirmed: true });
     expect((await claimTask(db, agentA, t.id)).assigneeId).toBe(agentA.id);
-    expect(await code(claimTask(db, agentB, t.id))).toBe("invalid"); // already in_progress
-    await moveTask(db, agentA, t.id, "review");
+    expect(await code(claimTask(db, agentB, t.id))).toBe("forbidden"); // held, lease live
+    expect(await code(moveTask(db, agentA, t.id, "review"))).toBe("invalid"); // summary required
+    await moveTask(db, agentA, t.id, "review", { summary: "implemented", links: ["https://x/pr/1"] });
     expect(await code(moveTask(db, agentA, t.id, "done"))).toBe("forbidden");
     expect((await moveTask(db, agentB, t.id, "done")).status).toBe("done");
     expect(await code(moveTask(db, human, t.id, "proposed"))).toBe("invalid");
     const full = await getTask(db, t.id);
+    expect(full).toMatchObject({ reviewSummary: "implemented", reviewLinks: ["https://x/pr/1"] });
     expect(full.events.map((e: any) => e.type)).toEqual(["created", "claimed", "moved", "moved"]);
   });
 
@@ -85,5 +87,55 @@ describe("projects", () => {
     expect((await renameBoard(db, human, a.id, "Alpha 2")).name).toBe("Alpha 2");
     expect((await listBoards(db)).map((x) => x.name)).toEqual(expect.arrayContaining(["Alpha 2", "Beta"]));
     expect(await code(createTask(db, agentA, { title: "x", boardId: "00000000-0000-0000-0000-000000000000" }))).toBe("not_found");
+  });
+});
+
+describe("leases", () => {
+  const expire = (id: string) => db.query(`UPDATE tasks SET lease_expires_at = now() - interval '1 minute' WHERE id=$1`, [id]);
+
+  it("agent claims get a lease; human claims do not; activity renews it", async () => {
+    const t = await createTask(db, human, { title: "t", confirmed: true });
+    const claimed = await claimTask(db, agentA, t.id);
+    expect(new Date(claimed.leaseExpiresAt!).getTime()).toBeGreaterThan(Date.now());
+    await expire(t.id);
+    await addComment(db, agentA, t.id, "still here");
+    expect(new Date((await heartbeatTask(db, agentA, t.id)).leaseExpiresAt!).getTime()).toBeGreaterThan(Date.now());
+    const h = await createTask(db, human, { title: "h", confirmed: true });
+    expect((await claimTask(db, human, h.id)).leaseExpiresAt).toBeNull();
+  });
+
+  it("another agent can take over only after the lease expires", async () => {
+    const t = await createTask(db, human, { title: "t", confirmed: true });
+    await claimTask(db, agentA, t.id);
+    expect(await code(claimTask(db, agentB, t.id))).toBe("forbidden");
+    expect(await code(claimTask(db, agentA, t.id))).toBe("forbidden"); // already yours
+    await expire(t.id);
+    expect((await inbox(db, human)).map((i) => i.kind)).toContain("stale");
+    const taken = await claimTask(db, agentB, t.id);
+    expect(taken.assigneeId).toBe(agentB.id);
+    expect(taken.leaseExpiresAt).not.toBeNull();
+    expect((await getTask(db, t.id)).events.map((e: any) => e.type)).toContain("taken_over");
+  });
+});
+
+describe("inbox & questions", () => {
+  it("surfaces confirmations, reviews and questions to the right people", async () => {
+    const proposed = await createTask(db, agentA, { title: "p" });
+    const t = await createTask(db, human, { title: "w", confirmed: true });
+    await claimTask(db, agentA, t.id);
+    await requestInput(db, agentA, t.id, "which db?");
+    await moveTask(db, agentA, t.id, "review", { summary: "s" });
+
+    const forHuman = (await inbox(db, human)).map((i) => `${i.kind}:${i.task.id}`);
+    expect(forHuman).toEqual(expect.arrayContaining([`confirm:${proposed.id}`, `review:${t.id}`, `input:${t.id}`]));
+    // the assignee agent, lacking approval rights, sees nothing; a confirming agent sees review but not its own work
+    expect(await inbox(db, agentA)).toHaveLength(0);
+    expect((await inbox(db, agentB)).map((i) => i.kind)).toContain("review");
+
+    expect(await code(answerInput(db, agentA, t.id, "x"))).toBe("forbidden");
+    await answerInput(db, human, t.id, "postgres");
+    expect((await inbox(db, human)).map((i) => i.kind)).not.toContain("input");
+    expect((await getTask(db, t.id)).comments.map((c: any) => c.body)).toEqual(["Question: which db?", "Answer: postgres"]);
+    expect(await code(answerInput(db, human, t.id, "again"))).toBe("invalid");
   });
 });

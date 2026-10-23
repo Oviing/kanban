@@ -3,12 +3,13 @@ import pg from "pg";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { relative } from "node:path";
-import { ensureDefaultBoard, migrate, pgDb } from "@kanban/core";
+import { ensureDefaultBoard, migrate, pgDb, setLeaseMinutes } from "@kanban/core";
 import { loadConfig } from "./config.js";
 import { createApp } from "./app.js";
 import { makeBearerAuth } from "./auth/bearer.js";
 
 const cfg = loadConfig();
+setLeaseMinutes(cfg.leaseMinutes);
 const db = pgDb(new pg.Pool({ connectionString: cfg.databaseUrl }));
 await migrate(db);
 await ensureDefaultBoard(db);

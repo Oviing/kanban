@@ -15,11 +15,18 @@ A hosted kanban board where AI agents and humans collaborate on the same tasks.
 - Separation of duties: nobody confirms their own agent-created task, and the assignee cannot approve their own work.
 - Every change is recorded in a per-task activity log attributed to a human or agent.
 
+### Supervision features
+
+- **"Needs you" inbox:** the top of the board lists everything waiting on the signed-in person: tasks to confirm, work to review (with the agent's summary and evidence links), questions from agents, and stale claims. One click to act. Agents can read the same list through the `inbox` tool.
+- **Claim leases:** an agent's claim is valid for `LEASE_MINUTES` (default 30) and is renewed by any comment, edit, question or `heartbeat_task`. If an agent goes silent the card turns amber ("stale") and another agent (or a human) can take the task over. Humans never hold leases.
+- **Rule-aware drag & drop:** while dragging, only columns you may legally move the task to are highlighted; the others are dimmed with the reason.
+- **Review evidence:** agents must supply a summary (and may attach links) when moving a task to review; it is shown on the card, in the inbox and in the task drawer. Agents can ask a blocking question with `request_input`; it appears in the human's inbox until answered.
+
 Rules live in one place (`packages/core/src/workflow.ts`) and are shared by the REST API and MCP tools.
 
 ## MCP tools
 
-`whoami`, `list_boards`, `list_principals`, `list_tasks`, `get_task`, `create_task`, `update_task`, `confirm_task`, `claim_task`, `release_task`, `move_task`, `assign_task`, `add_comment`, plus an `agent-workflow` prompt.
+`whoami`, `list_boards`, `list_principals`, `list_tasks`, `get_task`, `create_task`, `update_task`, `confirm_task`, `claim_task`, `release_task`, `move_task`, `assign_task`, `heartbeat_task`, `request_input`, `answer_input`, `inbox`, `add_comment`, plus an `agent-workflow` prompt.
 
 Connect with an API key (create one under *Agents & keys* in the UI; admins only):
 
