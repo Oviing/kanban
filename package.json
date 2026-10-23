@@ -1,0 +1,20 @@
+{
+  "name": "agent-kanban",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev": "npm run dev -w @kanban/server",
+    "dev:web": "npm run dev -w @kanban/web",
+    "build": "npm run build -w @kanban/core && npm run build -w @kanban/web && npm run build -w @kanban/server",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.8"
+  },
+  "engines": { "node": ">=22" }
+}
