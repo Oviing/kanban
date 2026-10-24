@@ -1,0 +1,156 @@
+<title>Agent Kanban Werkstatt</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: one hard-ruled column of numbered-by-content sections, screenshots full width inside ruled frames. */
+:root{
+  --paper:#E8E5DD; --sheet:#F5F3EE; --ink:#131313; --mid:#6A675F; --hair:#C8C4B9;
+  --red:#E5391B; --amber:#F2B308; --blue:#1C3FA3; --on-red:#fff;
+  --sans:'Archivo','Helvetica Neue',Arial,sans-serif; --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#0E0E0E; --sheet:#171716; --ink:#EDEBE4; --mid:#9A978F; --hair:#33322F; --blue:#7C98FF; color-scheme:dark}}
+:root[data-theme="dark"]{--paper:#0E0E0E; --sheet:#171716; --ink:#EDEBE4; --mid:#9A978F; --hair:#33322F; --blue:#7C98FF; color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:400 16px/1.55 var(--sans);-webkit-font-smoothing:antialiased;
+  padding-inline:max(16px,env(safe-area-inset-left,0px)) max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1120px;margin:0 auto;padding-block:32px 72px}
+.cap{font:600 11px/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase}
+.mid{color:var(--mid)}
+header{border:2px solid var(--ink);background:var(--sheet);display:grid;grid-template-columns:72px 1fr}
+.mark{background:var(--ink);display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:4px;padding:18px}
+.mark i:nth-child(1){background:var(--red);border-radius:50%}.mark i:nth-child(2){background:var(--sheet)}
+.mark i:nth-child(3){background:var(--amber);clip-path:polygon(0 100%,50% 0,100% 100%)}.mark i:nth-child(4){background:var(--blue)}
+.head{padding:28px 28px 26px;min-width:0}
+h1{font:300 clamp(40px,8vw,84px)/.92 var(--sans);letter-spacing:-.045em;margin:18px 0 18px;text-wrap:balance}
+h1 b{font-weight:800}
+.lede{max-width:62ch;color:var(--mid);margin:0}
+.meta{display:flex;flex-wrap:wrap;gap:8px 24px;margin-top:22px}
+.draft{background:var(--red);color:var(--on-red);padding:4px 8px}
+section{margin-top:56px}
+h2{font:700 13px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;margin:0 0 20px;padding-bottom:12px;border-bottom:2px solid var(--ink);display:flex;justify-content:space-between;gap:16px}
+h2 span{color:var(--mid);font-weight:500}
+h3{font:700 22px/1.15 var(--sans);letter-spacing:-.02em;margin:0 0 8px}
+p{margin:0 0 12px;max-width:66ch}
+.fig{margin:0 0 28px;border:1px solid var(--ink);background:var(--sheet)}
+.fig img{display:block;width:100%;height:auto}
+.fig figcaption{display:flex;gap:16px;flex-wrap:wrap;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--ink);font:500 12px/1.4 var(--mono);color:var(--mid)}
+.fig figcaption b{color:var(--ink)}
+.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:20px}
+.pair .fig{margin:0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));border:1px solid var(--ink);background:var(--sheet)}
+.grid>div{padding:20px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);min-width:0}
+.grid .cap{display:block;color:var(--mid);margin-bottom:10px}
+.grid p{font-size:14px;margin:0}
+.grid h3{font-size:18px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+.tw{overflow-x:auto;border:1px solid var(--ink);background:var(--sheet)}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--hair);vertical-align:top}
+th{font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mid);border-bottom:1px solid var(--ink);white-space:nowrap}
+td:first-child{font-weight:600;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+.dec{border:1px solid var(--ink);background:var(--sheet);padding:0;margin:0;list-style:none}
+.dec li{padding:16px 20px;border-bottom:1px solid var(--hair);display:grid;grid-template-columns:auto 1fr;gap:4px 16px}
+.dec li:last-child{border:0}
+.dec .cap{color:var(--red);padding-top:4px}
+.dec b{display:block}.dec span{color:var(--mid);font-size:14px}
+.sw{display:inline-block;width:10px;height:10px;margin-right:8px}
+footer{margin-top:56px;padding-top:16px;border-top:2px solid var(--ink)}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="mark"><i></i><i></i><i></i><i></i></div>
+  <div class="head">
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><span class="cap draft">Draft 0.1</span><span class="cap mid">Design proposal · Agent Kanban web UI</span></div>
+    <h1><b>Werkstatt.</b><br>A workshop look for the board.</h1>
+    <p class="lede">Minimalism meets industrial Bauhaus. Hard rules instead of soft cards, three primary colours reserved for signals, and status told by shape. Same data and same rules as today, drawn with fewer parts.</p>
+    <div class="meta cap mid"><span>Screens: Board · Task panel · Agents</span><span>Scope: apps/web only</span><span>Mockups use the live seed data</span></div>
+  </div>
+</header>
+
+<section>
+  <h2>01 · Where we are <span>current UI, same data</span></h2>
+  <figure class="fig"><img src="img/current-board.png" alt="Current board screen with rounded cards, green accent and a Needs you sidebar" width="1440" height="900">
+    <figcaption><span><b>Today.</b> Rounded cards, green accent, serif logo, a different border colour per status.</span><span>current-board.png</span></figcaption></figure>
+  <div class="grid">
+    <div><span class="cap">Colour does too much</span><p>Green is brand, success and lease bar at once. Card edges use five more colours for status and priority.</p></div>
+    <div><span class="cap">Three type voices</span><p>Fraunces, DM Sans and JetBrains Mono load together. The serif logo has no counterpart anywhere else in the app.</p></div>
+    <div><span class="cap">Soft and inconsistent</span><p>Radii of 8, 10 and 12 px, pills, outlines and dashed borders all appear on one screen.</p></div>
+    <div><span class="cap">Attention is diluted</span><p>An agent question and a normal card look alike until you read them. The Agents screen is dark, the board is light, with no shared system.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>02 · Direction <span>four rules</span></h2>
+  <div class="grid">
+    <div><span class="cap">Grid, not cards</span><h3>Ruled structure</h3><p>1 px hairlines inside, 2 px ink lines for structure. Zero radius, zero shadow. Columns are separated by rules and read like a drawing sheet.</p></div>
+    <div><span class="cap">Shape is status</span><h3>Circle, square, triangle</h3><p>Proposed, confirmed, active, review and done each get a distinct shape, so status survives greyscale and colour-blindness.</p></div>
+    <div><span class="cap">Colour is a signal</span><h3>Red, amber, cobalt</h3><p>Red means a human is needed. Amber means review. Cobalt means an agent is working. Everything else is ink on paper.</p></div>
+    <div><span class="cap">Data is mono</span><h3>Two faces only</h3><p>Archivo for content and large numerals, JetBrains Mono for IDs, counts, leases and labels. Fraunces and DM Sans are dropped.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>03 · Board <span>proposed</span></h2>
+  <figure class="fig"><img src="img/proposed-board.png" alt="Proposed board: ruled columns with large light numerals, flat cards, segmented lease bars and a red input-required block" width="1440" height="900">
+    <figcaption><span><b>Board.</b> “Needs you” stays as the left rail. An agent question becomes a solid red block on its card and a red header in the rail.</span><span>proposed-board.png</span></figcaption></figure>
+  <div class="grid">
+    <div><span class="cap">Columns</span><p>Large light numerals 01–05 give position at a glance. The header carries the status shape and a mono count.</p></div>
+    <div><span class="cap">Cards</span><p>Flat sheets with a 1 px ink edge. Proposed cards are dashed. Priority 3 and above gets a red P-tag and a red edge.</p></div>
+    <div><span class="cap">Lease</span><p>Twelve segments of 2.5 minutes each replace the smooth bar. Segments turn amber below 25%. Remaining time is printed in mono.</p></div>
+    <div><span class="cap">Done</span><p>The collapsed Done column becomes a hatched strip with vertical text. Click to open, as today.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>04 · Task panel <span>proposed vs. today</span></h2>
+  <div class="pair">
+    <figure class="fig"><img src="img/current-drawer.png" alt="Current task drawer" width="1440" height="900"><figcaption><span><b>Today</b></span><span>current-drawer.png</span></figcaption></figure>
+    <figure class="fig"><img src="img/proposed-task.png" alt="Proposed task panel with a red input-required band and a vertical activity timeline" width="1440" height="900"><figcaption><span><b>Proposed</b></span><span>proposed-task.png</span></figcaption></figure>
+  </div>
+  <p style="margin-top:20px">The panel opens with title and facts in a four-cell strip (assignee, lease, opened, revision). A pending agent question is the first thing below it, full width in red, with the answer field inside. The activity log becomes a ruled timeline; the latest event is a filled cobalt marker.</p>
+</section>
+
+<section>
+  <h2>05 · Agents <span>proposed vs. today</span></h2>
+  <div class="pair">
+    <figure class="fig"><img src="img/current-agents.png" alt="Current agents screen" width="1440" height="900"><figcaption><span><b>Today</b></span><span>current-agents.png</span></figcaption></figure>
+    <figure class="fig"><img src="img/proposed-agents.png" alt="Proposed agents screen: four ruled counters with a red waiting-on-human cell, agent table with bar traces, live feed in mono" width="1440" height="900"><figcaption><span><b>Proposed</b></span><span>proposed-agents.png</span></figcaption></figure>
+  </div>
+  <p style="margin-top:20px">The supervision screen keeps its dark setting, now as the same system inverted rather than a separate look. Four ruled counters sit on top; only “Waiting on a human” is filled red when it is above zero. The last-hour trace becomes a bar chart, and the pipeline is one segmented bar with the same status colours as the board.</p>
+</section>
+
+<section>
+  <h2>06 · System sheet <span>tokens and parts</span></h2>
+  <figure class="fig"><img src="img/proposed-system.png" alt="Design system sheet: type specimens, colour tokens, status shapes, lease segments, buttons and rules" width="1440" height="900">
+    <figcaption><span><b>Tokens.</b> Light is paper and sheet with ink. Dark inverts ink and paper and lifts cobalt to a lighter blue for contrast.</span><span>proposed-system.png</span></figcaption></figure>
+</section>
+
+<section>
+  <h2>07 · Cost to build <span>what changes in the repo</span></h2>
+  <div class="tw"><table>
+    <thead><tr><th>Area</th><th>Change</th><th>Size</th></tr></thead>
+    <tbody>
+    <tr><td>styles.css</td><td>Replace tokens and component rules (159 lines today). Remove radii, shadows and the three-colour card edges.</td><td>Rewrite, one file</td></tr>
+    <tr><td>index.html</td><td>Load Archivo and JetBrains Mono instead of DM Sans, Fraunces and JetBrains Mono.</td><td>One line</td></tr>
+    <tr><td>Board.tsx</td><td>Add status shape markup, column numerals, segmented lease (12 spans instead of one bar), <kbd>N</kbd> to focus new task.</td><td>Small</td></tr>
+    <tr><td>Inbox.tsx · TaskDrawer.tsx</td><td>Reorder drawer so a pending question comes first. Class names and markup for the rail items.</td><td>Small</td></tr>
+    <tr><td>Agents.tsx</td><td>Counter cells, bar trace in place of the line, pipeline bar segments.</td><td>Small</td></tr>
+    <tr><td>Server, core, API, MCP</td><td>No change.</td><td>None</td></tr>
+    </tbody></table></div>
+  <p style="margin-top:16px">The look is almost entirely CSS. No images or icon fonts are added; shapes are drawn with borders and clip-paths, so the bundle does not grow. Fewer font families means one less font request on first load. These are design intents; they have not been measured yet.</p>
+</section>
+
+<section>
+  <h2>08 · Decisions for you <span>before the next draft</span></h2>
+  <ul class="dec">
+    <li><span class="cap">A</span><div><b>Red as the “human needed” colour</b><span>Strongest signal, but red often reads as error. Alternative: amber for human-needed and red only for stale leases.</span></div></li>
+    <li><span class="cap">B</span><div><b>Dark theme on the board</b><span>Draft shows a light board and a dark Agents screen, as today. Option: follow the system theme everywhere.</span></div></li>
+    <li><span class="cap">C</span><div><b>Task IDs (AK-12)</b><span>The mockup shows short IDs. They need a counter per project in the data model, which is a server change.</span></div></li>
+    <li><span class="cap">D</span><div><b>Logo</b><span>Four-shape mark and wordmark are placeholders. Keep, replace, or drop?</span></div></li>
+  </ul>
+</section>
+
+<footer class="cap mid">Draft 0.1 · Mockup source in docs/design-proposal/mock · Rendered with Playwright at 1440 × 900</footer>
+</div>
