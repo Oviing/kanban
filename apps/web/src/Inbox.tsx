@@ -64,7 +64,7 @@ export function InboxSidebar({ open, onToggle, items, boards, people, onOpen, ac
                   <button onClick={() => move(t.id, "in_progress")}>Request changes</button>
                 </>}
                 {kind === "input" && (
-                  <button className="primary" onClick={() => { const a = askAnswer(t.question)?.trim(); if (a) act(() => api(`/tasks/${t.id}/answer`, { method: "POST", body: { answer: a } })); }}>Answer</button>
+                  <button className="primary" onClick={async () => { const a = (await askAnswer(t.question))?.trim(); if (a) act(() => api(`/tasks/${t.id}/answer`, { method: "POST", body: { answer: a } })); }}>Answer</button>
                 )}
                 {kind === "stale" && <button onClick={() => move(t.id, "confirmed")}>Release to board</button>}
               </div>

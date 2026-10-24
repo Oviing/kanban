@@ -38,9 +38,12 @@ docker run -d -p 127.0.0.1:3000:3000 -v kanban-data:/app/data \
 
 ### Screens
 
-- **Board:** project tabs, a hideable "Needs you" sidebar on the left (approvals, questions, stale claims; collapses to a rail with a count, remembered per browser, `[` toggles it) so the board keeps the full focus, five columns with rule-aware drag & drop (Done is collapsed until you open it), lease bars on active cards, and a side panel with the agent's review evidence, comments and a plain-language activity timeline. Esc closes the panel.
-- **Agents:** a supervision view per project (light or dark, following your system): working / waiting-on-human / stale / done-today counters, one row per agent (state, current task or open question, lease countdown, last-hour activity trace), a live activity feed filterable by humans or agents, and a pipeline bar. Stale rows have a one-click *Release to board*. Backed by `GET /api/overview` and `GET /api/activity`.
+- **Board:** project tabs, a hideable "Needs you" sidebar on the left (approvals, questions, stale claims; collapses to a rail with a count, remembered per browser, `[` toggles it), five columns with rule-aware drag & drop (Done is collapsed until you open it), and lease rings on active cards. Agents show as rounded squares, humans as circles. A question from an agent appears inside its card. The quick-capture bar understands `Fix login !high @nova #atlas` (priority, assignee, project); filter chips narrow the board to "Waiting on me", stale tasks, an assignee or a priority. On phones the board shows one column at a time with a column picker and a bottom tab bar.
+- **Task sheet:** slides in over the board with the agent's question first (answer it inline), a facts strip (assignee, priority, lease, last update), review evidence with link cards, comments (`⌘↵` sends) and an activity timeline that shows status changes. Esc closes it.
+- **Agents:** a supervision view per project: working / waiting-on-human / stale / done-today counters, a 60-minute run timeline with one lane per agent (claims, questions, reviews, expired leases; *Answer* and *Release to board* buttons right in the lane), a live activity feed filterable by humans or agents, and a pipeline bar. Backed by `GET /api/overview` and `GET /api/activity`.
 - **Keys:** agents and API keys (admins).
+- **Command palette:** `⌘K` / `Ctrl K` searches tasks, jumps to a project or view, and runs actions on the top match (answer, confirm, release, move, approve).
+- **Theme and keyboard:** a System / Light / Dark switch in the top bar. Shortcuts: `c` new task, `j`/`k` move between cards, `Enter` open, `[` toggle Needs you, `g` then `b`/`a`/`k` go to Board/Agents/Keys, `?` list all.
 
 ### Supervision features
 
