@@ -1,156 +1,128 @@
-<title>Agent Kanban Werkstatt</title>
+<title>Agent Kanban Clear</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-/* Layout: one hard-ruled column of numbered-by-content sections, screenshots full width inside ruled frames. */
+/* Layout: calm single column, large titles, screenshots in soft frames; grouped white sections on a light grey canvas. */
 :root{
-  --paper:#E8E5DD; --sheet:#F5F3EE; --ink:#131313; --mid:#6A675F; --hair:#C8C4B9;
-  --red:#E5391B; --amber:#F2B308; --blue:#1C3FA3; --on-red:#fff;
-  --sans:'Archivo','Helvetica Neue',Arial,sans-serif; --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  --bg:#F5F5F7; --card:#fff; --fg:#1D1D1F; --fg2:#6E6E73; --fg3:#A1A1A6; --sep:rgba(60,60,67,.16); --fill:rgba(120,120,128,.12);
+  --blue:#0071E3; --orange:#FF9F0A; --orange-fg:#B36B00; --shadow:0 0 0 .5px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.05),0 6px 20px rgba(0,0,0,.05);
+  --font:-apple-system,BlinkMacSystemFont,'SF Pro Text','SF Pro Display','Inter','Helvetica Neue',Arial,sans-serif;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --paper:#0E0E0E; --sheet:#171716; --ink:#EDEBE4; --mid:#9A978F; --hair:#33322F; --blue:#7C98FF; color-scheme:dark}}
-:root[data-theme="dark"]{--paper:#0E0E0E; --sheet:#171716; --ink:#EDEBE4; --mid:#9A978F; --hair:#33322F; --blue:#7C98FF; color-scheme:dark}
+  --bg:#000; --card:#1C1C1E; --fg:#F5F5F7; --fg2:#98989D; --fg3:#636366; --sep:rgba(255,255,255,.16); --fill:rgba(120,120,128,.24); --blue:#2997FF; --orange-fg:#FFB340; --shadow:0 0 0 .5px rgba(255,255,255,.1);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#000; --card:#1C1C1E; --fg:#F5F5F7; --fg2:#98989D; --fg3:#636366; --sep:rgba(255,255,255,.16); --fill:rgba(120,120,128,.24); --blue:#2997FF; --orange-fg:#FFB340; --shadow:0 0 0 .5px rgba(255,255,255,.1);color-scheme:dark}
 *{box-sizing:border-box}
-body{margin:0;background:var(--paper);color:var(--ink);font:400 16px/1.55 var(--sans);-webkit-font-smoothing:antialiased;
+body{margin:0;background:var(--bg);color:var(--fg);font:400 17px/1.5 var(--font);-webkit-font-smoothing:antialiased;letter-spacing:-.01em;
   padding-inline:max(16px,env(safe-area-inset-left,0px)) max(16px,env(safe-area-inset-right,0px))}
-.wrap{max-width:1120px;margin:0 auto;padding-block:32px 72px}
-.cap{font:600 11px/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase}
-.mid{color:var(--mid)}
-header{border:2px solid var(--ink);background:var(--sheet);display:grid;grid-template-columns:72px 1fr}
-.mark{background:var(--ink);display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:4px;padding:18px}
-.mark i:nth-child(1){background:var(--red);border-radius:50%}.mark i:nth-child(2){background:var(--sheet)}
-.mark i:nth-child(3){background:var(--amber);clip-path:polygon(0 100%,50% 0,100% 100%)}.mark i:nth-child(4){background:var(--blue)}
-.head{padding:28px 28px 26px;min-width:0}
-h1{font:300 clamp(40px,8vw,84px)/.92 var(--sans);letter-spacing:-.045em;margin:18px 0 18px;text-wrap:balance}
-h1 b{font-weight:800}
-.lede{max-width:62ch;color:var(--mid);margin:0}
-.meta{display:flex;flex-wrap:wrap;gap:8px 24px;margin-top:22px}
-.draft{background:var(--red);color:var(--on-red);padding:4px 8px}
-section{margin-top:56px}
-h2{font:700 13px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;margin:0 0 20px;padding-bottom:12px;border-bottom:2px solid var(--ink);display:flex;justify-content:space-between;gap:16px}
-h2 span{color:var(--mid);font-weight:500}
-h3{font:700 22px/1.15 var(--sans);letter-spacing:-.02em;margin:0 0 8px}
-p{margin:0 0 12px;max-width:66ch}
-.fig{margin:0 0 28px;border:1px solid var(--ink);background:var(--sheet)}
+.wrap{max-width:1080px;margin:0 auto;padding-block:56px 80px}
+.eyebrow{display:inline-flex;gap:8px;align-items:center;font-size:13px;font-weight:600;color:var(--orange-fg);background:rgba(255,159,10,.14);padding:4px 12px;border-radius:99px}
+h1{font:700 clamp(40px,7vw,72px)/1.04 var(--font);letter-spacing:-.04em;margin:20px 0 16px;text-wrap:balance}
+.lede{font-size:clamp(19px,2.4vw,24px);line-height:1.35;color:var(--fg2);max-width:34em;margin:0;letter-spacing:-.015em}
+section{margin-top:88px}
+h2{font:700 clamp(28px,4vw,40px)/1.1 var(--font);letter-spacing:-.03em;margin:0 0 12px;text-wrap:balance}
+.sub{color:var(--fg2);max-width:36em;margin:0 0 28px}
+h3{font:600 19px/1.25 var(--font);letter-spacing:-.015em;margin:0 0 6px}
+p{margin:0}
+.fig{margin:0 0 20px;background:var(--card);border-radius:22px;box-shadow:var(--shadow);overflow:hidden}
 .fig img{display:block;width:100%;height:auto}
-.fig figcaption{display:flex;gap:16px;flex-wrap:wrap;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--ink);font:500 12px/1.4 var(--mono);color:var(--mid)}
-.fig figcaption b{color:var(--ink)}
+.fig figcaption{padding:14px 20px;font-size:14px;color:var(--fg2);border-top:.5px solid var(--sep)}
+.fig figcaption b{color:var(--fg);font-weight:600}
 .pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:20px}
 .pair .fig{margin:0}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));border:1px solid var(--ink);background:var(--sheet)}
-.grid>div{padding:20px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);min-width:0}
-.grid .cap{display:block;color:var(--mid);margin-bottom:10px}
-.grid p{font-size:14px;margin:0}
-.grid h3{font-size:18px}
-table{border-collapse:collapse;width:100%;font-size:14px}
-.tw{overflow-x:auto;border:1px solid var(--ink);background:var(--sheet)}
-th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--hair);vertical-align:top}
-th{font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mid);border-bottom:1px solid var(--ink);white-space:nowrap}
-td:first-child{font-weight:600;white-space:nowrap}
-tr:last-child td{border-bottom:0}
-.dec{border:1px solid var(--ink);background:var(--sheet);padding:0;margin:0;list-style:none}
-.dec li{padding:16px 20px;border-bottom:1px solid var(--hair);display:grid;grid-template-columns:auto 1fr;gap:4px 16px}
-.dec li:last-child{border:0}
-.dec .cap{color:var(--red);padding-top:4px}
-.dec b{display:block}.dec span{color:var(--mid);font-size:14px}
-.sw{display:inline-block;width:10px;height:10px;margin-right:8px}
-footer{margin-top:56px;padding-top:16px;border-top:2px solid var(--ink)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:14px}
+.c{background:var(--card);border-radius:20px;box-shadow:var(--shadow);padding:22px;min-width:0}
+.c p{font-size:15px;color:var(--fg2)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;vertical-align:1px}
+.list{background:var(--card);border-radius:20px;box-shadow:var(--shadow);overflow:hidden}
+.list>div{padding:16px 22px;border-top:.5px solid var(--sep);display:grid;grid-template-columns:minmax(0,200px) 1fr;gap:4px 24px}
+.list>div:first-child{border-top:0}
+.list b{font-weight:600}.list span{color:var(--fg2);font-size:15px}
+@media (max-width:640px){.list>div{grid-template-columns:1fr}}
+.choice{counter-reset:c}
+.choice>div{display:grid;grid-template-columns:32px 1fr;gap:14px;align-items:start}
+.choice i{font-style:normal;width:28px;height:28px;border-radius:50%;background:var(--blue);color:#fff;font:600 14px/28px var(--font);text-align:center}
+.choice span{display:block;color:var(--fg2);font-size:15px}
+footer{margin-top:80px;color:var(--fg3);font-size:13px}
 </style>
 
 <div class="wrap">
-<header>
-  <div class="mark"><i></i><i></i><i></i><i></i></div>
-  <div class="head">
-    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><span class="cap draft">Draft 0.1</span><span class="cap mid">Design proposal · Agent Kanban web UI</span></div>
-    <h1><b>Werkstatt.</b><br>A workshop look for the board.</h1>
-    <p class="lede">Minimalism meets industrial Bauhaus. Hard rules instead of soft cards, three primary colours reserved for signals, and status told by shape. Same data and same rules as today, drawn with fewer parts.</p>
-    <div class="meta cap mid"><span>Screens: Board · Task panel · Agents</span><span>Scope: apps/web only</span><span>Mockups use the live seed data</span></div>
-  </div>
-</header>
+  <span class="eyebrow">Draft 0.2 · Design proposal for the Agent Kanban web UI</span>
+  <h1>Clear.</h1>
+  <p class="lede">A calm, Apple-style interface for the board. System type, soft surfaces, one blue accent, and colour only where it means something. The industrial Bauhaus idea is kept as discipline: a strict grid, no ornament, every element earning its place.</p>
 
-<section>
-  <h2>01 · Where we are <span>current UI, same data</span></h2>
-  <figure class="fig"><img src="img/current-board.png" alt="Current board screen with rounded cards, green accent and a Needs you sidebar" width="1440" height="900">
-    <figcaption><span><b>Today.</b> Rounded cards, green accent, serif logo, a different border colour per status.</span><span>current-board.png</span></figcaption></figure>
-  <div class="grid">
-    <div><span class="cap">Colour does too much</span><p>Green is brand, success and lease bar at once. Card edges use five more colours for status and priority.</p></div>
-    <div><span class="cap">Three type voices</span><p>Fraunces, DM Sans and JetBrains Mono load together. The serif logo has no counterpart anywhere else in the app.</p></div>
-    <div><span class="cap">Soft and inconsistent</span><p>Radii of 8, 10 and 12 px, pills, outlines and dashed borders all appear on one screen.</p></div>
-    <div><span class="cap">Attention is diluted</span><p>An agent question and a normal card look alike until you read them. The Agents screen is dark, the board is light, with no shared system.</p></div>
-  </div>
-</section>
+  <section>
+    <h2>Today</h2>
+    <p class="sub">The current board, running locally with the same demo data used in every mockup below.</p>
+    <figure class="fig"><img src="img/current-board.png" alt="Current board: green accent, serif logo, outlined cards in light grey columns" width="1440" height="900">
+      <figcaption><b>Current board.</b> Green is brand, success and lease bar at once. Fraunces, DM Sans and JetBrains Mono all load together. Card edges use several colours for status and priority.</figcaption></figure>
+  </section>
 
-<section>
-  <h2>02 · Direction <span>four rules</span></h2>
-  <div class="grid">
-    <div><span class="cap">Grid, not cards</span><h3>Ruled structure</h3><p>1 px hairlines inside, 2 px ink lines for structure. Zero radius, zero shadow. Columns are separated by rules and read like a drawing sheet.</p></div>
-    <div><span class="cap">Shape is status</span><h3>Circle, square, triangle</h3><p>Proposed, confirmed, active, review and done each get a distinct shape, so status survives greyscale and colour-blindness.</p></div>
-    <div><span class="cap">Colour is a signal</span><h3>Red, amber, cobalt</h3><p>Red means a human is needed. Amber means review. Cobalt means an agent is working. Everything else is ink on paper.</p></div>
-    <div><span class="cap">Data is mono</span><h3>Two faces only</h3><p>Archivo for content and large numerals, JetBrains Mono for IDs, counts, leases and labels. Fraunces and DM Sans are dropped.</p></div>
-  </div>
-</section>
+  <section>
+    <h2>Direction</h2>
+    <p class="sub">Four decisions that apply to every screen.</p>
+    <div class="cards">
+      <div class="c"><h3>The system font</h3><p>SF Pro on Apple devices, with Inter as fallback elsewhere. No web fonts to download, and text looks native on every Mac and iPhone.</p></div>
+      <div class="c"><h3>Soft, layered surfaces</h3><p>White cards with 14 px corners on pale grey columns. A frosted top bar and frosted task sheet. Separators are half a pixel, shadows are two faint layers.</p></div>
+      <div class="c"><h3>One accent</h3><p>Apple blue marks actions. Status colours stay small: green working, orange needs you, purple review. Orange is the only loud colour on the board.</p></div>
+      <div class="c"><h3>Quiet motion</h3><p>Short, spring-like card moves and sheet slides. Reduced-motion turns them off. Nothing animates at rest except the live dot.</p></div>
+    </div>
+  </section>
 
-<section>
-  <h2>03 · Board <span>proposed</span></h2>
-  <figure class="fig"><img src="img/proposed-board.png" alt="Proposed board: ruled columns with large light numerals, flat cards, segmented lease bars and a red input-required block" width="1440" height="900">
-    <figcaption><span><b>Board.</b> “Needs you” stays as the left rail. An agent question becomes a solid red block on its card and a red header in the rail.</span><span>proposed-board.png</span></figcaption></figure>
-  <div class="grid">
-    <div><span class="cap">Columns</span><p>Large light numerals 01–05 give position at a glance. The header carries the status shape and a mono count.</p></div>
-    <div><span class="cap">Cards</span><p>Flat sheets with a 1 px ink edge. Proposed cards are dashed. Priority 3 and above gets a red P-tag and a red edge.</p></div>
-    <div><span class="cap">Lease</span><p>Twelve segments of 2.5 minutes each replace the smooth bar. Segments turn amber below 25%. Remaining time is printed in mono.</p></div>
-    <div><span class="cap">Done</span><p>The collapsed Done column becomes a hatched strip with vertical text. Click to open, as today.</p></div>
-  </div>
-</section>
+  <section>
+    <h2>Board</h2>
+    <p class="sub">The “Needs you” list becomes an inset group on the left. Columns are quiet containers and the cards carry the content.</p>
+    <figure class="fig"><img src="img/clear-board.png" alt="Proposed board: segmented tab control, grouped Needs you list, rounded white cards, ring-shaped lease indicators" width="1440" height="900">
+      <figcaption><b>Light.</b> A question from an agent turns its card orange and shows the question inside the card. The lease is a small ring beside the agent, orange when under 10 minutes.</figcaption></figure>
+    <figure class="fig"><img src="img/clear-board-dark.png" alt="The same board in dark mode" width="1440" height="900">
+      <figcaption><b>Dark.</b> Follows the system setting on every screen. Today the board is light-only and only Agents is dark.</figcaption></figure>
+  </section>
 
-<section>
-  <h2>04 · Task panel <span>proposed vs. today</span></h2>
-  <div class="pair">
-    <figure class="fig"><img src="img/current-drawer.png" alt="Current task drawer" width="1440" height="900"><figcaption><span><b>Today</b></span><span>current-drawer.png</span></figcaption></figure>
-    <figure class="fig"><img src="img/proposed-task.png" alt="Proposed task panel with a red input-required band and a vertical activity timeline" width="1440" height="900"><figcaption><span><b>Proposed</b></span><span>proposed-task.png</span></figcaption></figure>
-  </div>
-  <p style="margin-top:20px">The panel opens with title and facts in a four-cell strip (assignee, lease, opened, revision). A pending agent question is the first thing below it, full width in red, with the answer field inside. The activity log becomes a ruled timeline; the latest event is a filled cobalt marker.</p>
-</section>
+  <section>
+    <h2>Task</h2>
+    <p class="sub">A sheet that slides in over the board, with the question first when an agent is waiting.</p>
+    <div class="pair">
+      <figure class="fig"><img src="img/current-drawer.png" alt="Current task drawer" width="1440" height="900"><figcaption><b>Today</b></figcaption></figure>
+      <figure class="fig"><img src="img/clear-task.png" alt="Proposed task sheet with frosted background, facts strip, orange question block and plain activity list" width="1440" height="900"><figcaption><b>Proposed</b></figcaption></figure>
+    </div>
+  </section>
 
-<section>
-  <h2>05 · Agents <span>proposed vs. today</span></h2>
-  <div class="pair">
-    <figure class="fig"><img src="img/current-agents.png" alt="Current agents screen" width="1440" height="900"><figcaption><span><b>Today</b></span><span>current-agents.png</span></figcaption></figure>
-    <figure class="fig"><img src="img/proposed-agents.png" alt="Proposed agents screen: four ruled counters with a red waiting-on-human cell, agent table with bar traces, live feed in mono" width="1440" height="900"><figcaption><span><b>Proposed</b></span><span>proposed-agents.png</span></figcaption></figure>
-  </div>
-  <p style="margin-top:20px">The supervision screen keeps its dark setting, now as the same system inverted rather than a separate look. Four ruled counters sit on top; only “Waiting on a human” is filled red when it is above zero. The last-hour trace becomes a bar chart, and the pipeline is one segmented bar with the same status colours as the board.</p>
-</section>
+  <section>
+    <h2>Agents</h2>
+    <p class="sub">Four widgets, a table of agents and a live feed. It uses the same light or dark theme as the board.</p>
+    <div class="pair">
+      <figure class="fig"><img src="img/current-agents.png" alt="Current agents screen" width="1440" height="900"><figcaption><b>Today</b></figcaption></figure>
+      <figure class="fig"><img src="img/clear-agents.png" alt="Proposed agents screen with four widget tiles, one orange, agent rows with avatars and bar traces, pipeline bar and live activity" width="1440" height="900"><figcaption><b>Proposed</b></figcaption></figure>
+    </div>
+  </section>
 
-<section>
-  <h2>06 · System sheet <span>tokens and parts</span></h2>
-  <figure class="fig"><img src="img/proposed-system.png" alt="Design system sheet: type specimens, colour tokens, status shapes, lease segments, buttons and rules" width="1440" height="900">
-    <figcaption><span><b>Tokens.</b> Light is paper and sheet with ink. Dark inverts ink and paper and lifts cobalt to a lighter blue for contrast.</span><span>proposed-system.png</span></figcaption></figure>
-</section>
+  <section>
+    <h2>Design sheet</h2>
+    <p class="sub">The parts the screens are built from.</p>
+    <figure class="fig"><img src="img/clear-system.png" alt="Design sheet with type scale, colour swatches, lease rings, buttons and surface rules" width="1440" height="900">
+      <figcaption><b>Tokens.</b> Type, colour, lease ring, buttons and surfaces.</figcaption></figure>
+  </section>
 
-<section>
-  <h2>07 · Cost to build <span>what changes in the repo</span></h2>
-  <div class="tw"><table>
-    <thead><tr><th>Area</th><th>Change</th><th>Size</th></tr></thead>
-    <tbody>
-    <tr><td>styles.css</td><td>Replace tokens and component rules (159 lines today). Remove radii, shadows and the three-colour card edges.</td><td>Rewrite, one file</td></tr>
-    <tr><td>index.html</td><td>Load Archivo and JetBrains Mono instead of DM Sans, Fraunces and JetBrains Mono.</td><td>One line</td></tr>
-    <tr><td>Board.tsx</td><td>Add status shape markup, column numerals, segmented lease (12 spans instead of one bar), <kbd>N</kbd> to focus new task.</td><td>Small</td></tr>
-    <tr><td>Inbox.tsx · TaskDrawer.tsx</td><td>Reorder drawer so a pending question comes first. Class names and markup for the rail items.</td><td>Small</td></tr>
-    <tr><td>Agents.tsx</td><td>Counter cells, bar trace in place of the line, pipeline bar segments.</td><td>Small</td></tr>
-    <tr><td>Server, core, API, MCP</td><td>No change.</td><td>None</td></tr>
-    </tbody></table></div>
-  <p style="margin-top:16px">The look is almost entirely CSS. No images or icon fonts are added; shapes are drawn with borders and clip-paths, so the bundle does not grow. Fewer font families means one less font request on first load. These are design intents; they have not been measured yet.</p>
-</section>
+  <section>
+    <h2>What it takes</h2>
+    <p class="sub">Almost entirely CSS in <code>apps/web</code>. Server, API and MCP tools do not change.</p>
+    <div class="list">
+      <div><b>styles.css</b><span>New tokens and component rules in place of the current 159 lines. Light and dark from one set of variables.</span></div>
+      <div><b>index.html</b><span>Remove the Google Fonts request. The system font stack needs none.</span></div>
+      <div><b>Board.tsx</b><span>Agent avatar and lease ring in the card footer, segmented tab control, orange question block inside the card.</span></div>
+      <div><b>TaskDrawer.tsx</b><span>Facts strip, question block first, plain activity list. Slide-in sheet.</span></div>
+      <div><b>Agents.tsx · Inbox.tsx</b><span>Widget tiles, avatar rows, inset group for the inbox.</span></div>
+    </div>
+    <p class="sub" style="margin-top:16px">Removing three web fonts should make first load lighter. That is an expectation and has not been measured.</p>
+  </section>
 
-<section>
-  <h2>08 · Decisions for you <span>before the next draft</span></h2>
-  <ul class="dec">
-    <li><span class="cap">A</span><div><b>Red as the “human needed” colour</b><span>Strongest signal, but red often reads as error. Alternative: amber for human-needed and red only for stale leases.</span></div></li>
-    <li><span class="cap">B</span><div><b>Dark theme on the board</b><span>Draft shows a light board and a dark Agents screen, as today. Option: follow the system theme everywhere.</span></div></li>
-    <li><span class="cap">C</span><div><b>Task IDs (AK-12)</b><span>The mockup shows short IDs. They need a counter per project in the data model, which is a server change.</span></div></li>
-    <li><span class="cap">D</span><div><b>Logo</b><span>Four-shape mark and wordmark are placeholders. Keep, replace, or drop?</span></div></li>
-  </ul>
-</section>
+  <section>
+    <h2>Your call</h2>
+    <p class="sub">Three things to settle before the next draft.</p>
+    <div class="list choice">
+      <div><i>1</i><div><b>How close to Apple?</b><span>This draft borrows the feel (type, surfaces, frosted bars) but not Apple's own marks or icons. Say if you want it stricter, such as macOS window chrome, or looser.</span></div></div>
+      <div><i>2</i><div><b>Orange for “needs you”</b><span>Orange is warmer than red and keeps red for errors and priority. Alternative: blue for everything that needs a human.</span></div></div>
+      <div><i>3</i><div><b>Accent colour</b><span>Apple blue is the safe choice. The accent can be any single colour, such as graphite or green for a product identity.</span></div></div>
+    </div>
+  </section>
 
-<footer class="cap mid">Draft 0.1 · Mockup source in docs/design-proposal/mock · Rendered with Playwright at 1440 × 900</footer>
+  <footer>Draft 0.2 · Mockup source in docs/design-proposal/mock · Screenshots rendered at 1440 × 900 with Inter standing in for SF Pro.</footer>
 </div>
