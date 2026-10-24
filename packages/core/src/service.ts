@@ -26,6 +26,8 @@ export interface Task {
   version: number;
   needsInput: boolean;
   question: string | null;
+  /** Who asked the pending question; they cannot answer it. */
+  questionBy: string | null;
   leaseExpiresAt: string | null;
   reviewSummary: string | null;
   reviewLinks: string[];
@@ -43,7 +45,7 @@ export const taskCtx = (t: Task): TaskCtx => ({
 const TASK_COLS = `id, board_id AS "boardId", title, description, status, priority, labels,
   created_by AS "createdBy", assignee_id AS "assigneeId", confirmed_by AS "confirmedBy",
   confirmed_at AS "confirmedAt", version,
-  needs_input AS "needsInput", question, lease_expires_at AS "leaseExpiresAt",
+  needs_input AS "needsInput", question, question_by AS "questionBy", lease_expires_at AS "leaseExpiresAt",
   review_summary AS "reviewSummary", review_links AS "reviewLinks",
   created_at AS "createdAt", updated_at AS "updatedAt"`;
 
@@ -384,8 +386,8 @@ export async function requestInput(db: Db, actor: Principal, id: string, questio
     const cur = await load(t, id, true);
     if (cur.status === "done") throw new KanbanError("invalid", "task is done");
     const { rows } = await t.query<Task>(
-      `UPDATE tasks SET needs_input=true, question=$2, version=version+1, updated_at=now() WHERE id=$1 RETURNING ${TASK_COLS}`,
-      [id, question.trim()],
+      `UPDATE tasks SET needs_input=true, question=$2, question_by=$3, version=version+1, updated_at=now() WHERE id=$1 RETURNING ${TASK_COLS}`,
+      [id, question.trim(), actor.id],
     );
     await t.query(`INSERT INTO comments (task_id, author_id, body) VALUES ($1,$2,$3)`, [id, actor.id, `Question: ${question.trim()}`]);
     await touchLease(t, id, actor);
@@ -400,7 +402,7 @@ export async function answerInput(db: Db, actor: Principal, id: string, answer: 
   if (!answer?.trim()) throw new KanbanError("invalid", "answer is required");
   const task = await db.tx(async (t) => {
     const cur = await load(t, id, true);
-    if (actor.kind === "agent" && cur.assigneeId === actor.id) throw new KanbanError("forbidden", "an agent cannot answer its own question");
+    if (cur.questionBy === actor.id) throw new KanbanError("forbidden", "you cannot answer your own question");
     if (!cur.needsInput) throw new KanbanError("invalid", "no question is pending on this task");
     const { rows } = await t.query<Task>(
       `UPDATE tasks SET needs_input=false, version=version+1, updated_at=now() WHERE id=$1 RETURNING ${TASK_COLS}`,
@@ -428,7 +430,7 @@ export async function inbox(db: Db, actor: Principal): Promise<InboxItem[]> {
   for (const t of rows) {
     if (t.status === "proposed" && can(t, "confirmed")) out.push({ kind: "confirm", task: t });
     if (t.status === "review" && can(t, "done")) out.push({ kind: "review", task: t });
-    if (t.needsInput && t.assigneeId !== actor.id) out.push({ kind: "input", task: t });
+    if (t.needsInput && t.questionBy !== actor.id) out.push({ kind: "input", task: t });
     if (t.status === "in_progress" && taskCtx(t).leaseExpired) out.push({ kind: "stale", task: t });
   }
   return out;
@@ -451,8 +453,11 @@ export async function assignTask(db: Db, actor: Principal, id: string, assigneeI
       if (!rows[0]) throw new KanbanError("not_found", "assignee not found");
     }
     const { rows } = await t.query<Task>(
-      `UPDATE tasks SET assignee_id=$2, version=version+1, updated_at=now() WHERE id=$1 RETURNING ${TASK_COLS}`,
-      [id, assigneeId],
+      `UPDATE tasks SET assignee_id=$2, version=version+1, updated_at=now(),
+         lease_expires_at = CASE WHEN status='in_progress' AND EXISTS (SELECT 1 FROM principals WHERE id=$2 AND kind='agent')
+                                 THEN now() + make_interval(secs => $3) ELSE NULL END
+       WHERE id=$1 RETURNING ${TASK_COLS}`,
+      [id, assigneeId, leaseSeconds],
     );
     await logEvent(t, id, actor, "assigned", { assigneeId });
     return rows[0];

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import {
-  addComment, listActivity, overview, answerInput, heartbeatTask, inbox, requestInput, createBoard, listBoards, listTasks, renameBoard, claimTask, confirmTask, createAgent, createApiKey, createTask, getTask, KanbanError,
+  addComment, listActivity, overview, answerInput, assignTask, heartbeatTask, inbox, requestInput, createBoard, listBoards, listTasks, renameBoard, claimTask, confirmTask, createAgent, createApiKey, createTask, getTask, KanbanError,
   migrate, moveTask, pgliteDb, revokeApiKey, upsertOidcPrincipal, verifyApiKey, type Db, type Principal,
 } from "../src/index.js";
 
@@ -137,6 +137,24 @@ describe("inbox & questions", () => {
     expect((await inbox(db, human)).map((i) => i.kind)).not.toContain("input");
     expect((await getTask(db, t.id)).comments.map((c: any) => c.body)).toEqual(["Question: which db?", "Answer: postgres"]);
     expect(await code(answerInput(db, human, t.id, "again"))).toBe("invalid");
+  });
+});
+
+describe("questions and reassignment", () => {
+  it("the requester cannot answer, even when not the assignee", async () => {
+    const t = await createTask(db, human, { title: "q", confirmed: true });
+    await claimTask(db, agentA, t.id);
+    await requestInput(db, agentB, t.id, "who?");
+    expect(await code(answerInput(db, agentB, t.id, "me"))).toBe("forbidden");
+    expect((await inbox(db, agentB)).map((i) => i.kind)).not.toContain("input");
+    expect((await answerInput(db, agentA, t.id, "ok")).needsInput).toBe(false);
+  });
+
+  it("reassigning an in-progress task refreshes or clears the lease", async () => {
+    const t = await createTask(db, human, { title: "r", confirmed: true });
+    await claimTask(db, agentA, t.id);
+    expect((await assignTask(db, agentB, t.id, human.id)).leaseExpiresAt).toBeNull();
+    expect((await assignTask(db, agentB, t.id, agentB.id)).leaseExpiresAt).not.toBeNull();
   });
 });
 

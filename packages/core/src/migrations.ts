@@ -78,6 +78,9 @@ const MIGRATIONS: string[] = [
   ALTER TABLE boards DROP COLUMN human_in_loop;
   ALTER TABLE principals DROP COLUMN can_confirm;
   `,
+  `
+  ALTER TABLE tasks ADD COLUMN question_by uuid REFERENCES principals(id);
+  `,
 ];
 
 export async function migrate(db: Db): Promise<void> {

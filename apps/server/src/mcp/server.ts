@@ -13,7 +13,7 @@ const WORKFLOW = `Workflow: proposed -> confirmed -> in_progress -> review -> do
 - Pick up work with claim_task on a "confirmed" task. If you can't finish, release_task.
 - Your claim is a lease (30 min by default). Any comment, update or heartbeat_task renews it; if you go quiet, another agent may take the task over.
 - When finished, move_task to "review" with a summary (required) and links to evidence (PRs, files, logs).
-- If you are blocked or need a decision, call request_input with a clear question; humans see it in their inbox. Use inbox to see what needs your decision (if you are allowed to confirm/approve).
+- If you are blocked or need a decision, call request_input with a clear question; others see it in their inbox. Use inbox to see what needs your decision.
 - You may not approve your own work: review -> done must be done by someone else.
 - You can never approve your own work or answer your own question; someone else must.
 - Use add_comment to report progress, blockers and questions.`;
@@ -56,7 +56,7 @@ export function buildMcpServer(db: Db, me: Principal): McpServer {
     { taskId: id, title: z.string().optional(), description: z.string().optional(), priority: z.number().int().min(0).max(4).optional(), labels: z.array(z.string()).optional(), expectedVersion: z.number().int().optional() },
     ({ taskId, ...rest }) => updateTask(db, me, taskId, rest),
   );
-  tool("confirm_task", "Confirm a proposed task so it can be worked on. Cannot confirm your own tasks.", { taskId: id }, ({ taskId }) => confirmTask(db, me, taskId));
+  tool("confirm_task", "Confirm a proposed task so it can be worked on. You may confirm tasks you created yourself.", { taskId: id }, ({ taskId }) => confirmTask(db, me, taskId));
   tool("claim_task", "Claim a confirmed task: assigns it to you and moves it to in_progress.", { taskId: id }, ({ taskId }) => claimTask(db, me, taskId));
   tool("release_task", "Give up an in_progress task you hold; it returns to confirmed.", { taskId: id }, ({ taskId }) => releaseTask(db, me, taskId));
   tool(
@@ -67,13 +67,13 @@ export function buildMcpServer(db: Db, me: Principal): McpServer {
   );
   tool(
     "assign_task",
-    "Assign (or unassign with null) a task. Agents can only assign to themselves.",
+    "Assign (or unassign with null) a task. Anyone may assign to anyone; assigning an in_progress task to an agent starts a fresh lease.",
     { taskId: id, assigneeId: id.nullable() },
     ({ taskId, assigneeId }) => assignTask(db, me, taskId, assigneeId),
   );
   tool("heartbeat_task", "Renew your claim lease on an in_progress task you hold, during long-running work.", { taskId: id }, ({ taskId }) => heartbeatTask(db, me, taskId));
-  tool("request_input", "Ask a human (or approver) a question; flags the task as blocked on input.", { taskId: id, question: z.string().min(1) }, ({ taskId, question }) => requestInput(db, me, taskId, question));
-  tool("answer_input", "Answer a pending question on a task (humans and approving agents).", { taskId: id, answer: z.string().min(1) }, ({ taskId, answer }) => answerInput(db, me, taskId, answer));
+  tool("request_input", "Ask a question; flags the task as blocked on input.", { taskId: id, question: z.string().min(1) }, ({ taskId, question }) => requestInput(db, me, taskId, question));
+  tool("answer_input", "Answer a pending question on a task (anyone except whoever asked the question).", { taskId: id, answer: z.string().min(1) }, ({ taskId, answer }) => answerInput(db, me, taskId, answer));
   tool("inbox", "Tasks waiting on your decision: to confirm, to review, with questions, or stale claims.", {}, async () => (await inbox(db, me)).map((i) => ({ kind: i.kind, id: i.task.id, title: i.task.title, status: i.task.status, question: i.task.question, reviewSummary: i.task.reviewSummary })));
   tool("add_comment", "Comment on a task.", { taskId: id, body: z.string().min(1) }, ({ taskId, body }) => addComment(db, me, taskId, body));
 
