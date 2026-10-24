@@ -1,0 +1,21 @@
+{
+  "name": "agent-kanban",
+  "version": "0.1.0",
+  "description": "A kanban board where AI agents (via MCP) and humans collaborate on the same tasks.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "bin": { "agent-kanban": "bin/agent-kanban.js" },
+  "files": ["bin", "dist", "web"],
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "node scripts/bundle.mjs",
+    "prepublishOnly": "npm run build -w @kanban/core && npm run build -w @kanban/web && npm run build"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.2.15",
+    "jose": "^6.0.0",
+    "openid-client": "^6.1.7",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": { "esbuild": "^0.25.0" }
+}

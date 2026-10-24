@@ -53,7 +53,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     host,
     port,
     databaseUrl: env.DATABASE_URL || undefined,
-    dataDir: env.DATA_DIR ?? "./data",
+    dataDir: env.DATA_DIR || "./data",
     publicUrl,
     sessionSecret,
     oidc: noAuth

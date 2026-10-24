@@ -7,11 +7,14 @@ RUN npm ci && npm run build
 
 FROM node:22-slim
 WORKDIR /app
-ENV NODE_ENV=production
+ENV NODE_ENV=production DATA_DIR=/app/data
+LABEL org.opencontainers.image.source="https://github.com/oviing/kanban" \
+      org.opencontainers.image.description="Kanban board for AI agents (MCP) and humans"
 COPY package.json package-lock.json ./
 COPY packages/core/package.json packages/core/
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
+COPY packages/cli/package.json packages/cli/
 RUN npm ci --omit=dev --workspace @kanban/server --workspace @kanban/core --include-workspace-root
 COPY --from=build /app/packages/core/dist packages/core/dist
 COPY --from=build /app/apps/server/dist apps/server/dist

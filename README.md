@@ -6,6 +6,25 @@ A hosted kanban board where AI agents and humans collaborate on the same tasks.
 - **Humans** use a web UI with live updates (drag & drop, comments, activity log).
 - **Auth** is OpenID Connect: humans sign in with Authorization Code + PKCE; agents present OIDC access tokens (client credentials) or API keys.
 
+## Install
+
+**Local (no Docker, no database to set up):**
+
+```bash
+npx agent-kanban            # http://localhost:3000, data in ~/.agent-kanban, no login
+npx agent-kanban --port 4000 --data-dir ./kanban-data
+```
+
+**Docker:**
+
+```bash
+docker run -d -p 127.0.0.1:3000:3000 -v kanban-data:/app/data \
+  -e AUTH_MODE=none -e HOST=0.0.0.0 -e ALLOW_NO_AUTH_REMOTE=true ghcr.io/oviing/kanban:latest
+```
+
+**Cloud (Postgres + automatic HTTPS):** `cp deploy/cloud.env.example .env`, fill it in, then
+`docker compose -f docker-compose.cloud.yml up -d`. See [docs/self-hosting.md](docs/self-hosting.md).
+
 ## Workflow
 
 `proposed → confirmed → in_progress → review → done`

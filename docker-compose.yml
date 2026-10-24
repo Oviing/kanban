@@ -1,4 +1,4 @@
-# Local development stack: Postgres + Keycloak (dev OIDC provider) + the app.
+# DEV ONLY: Postgres + Keycloak + the app. For production use docker-compose.cloud.yml.
 # Keycloak admin console: http://localhost:8080 (admin/admin).
 services:
   db:

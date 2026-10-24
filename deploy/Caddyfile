@@ -1,0 +1,7 @@
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:3000 {
+		# SSE live updates must not be buffered
+		flush_interval -1
+	}
+}

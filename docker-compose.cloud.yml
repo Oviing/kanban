@@ -1,0 +1,42 @@
+# Production-style stack: app + Postgres + Caddy (automatic HTTPS).
+#
+#   cp deploy/cloud.env.example .env   # set DOMAIN, SESSION_SECRET, POSTGRES_PASSWORD and OIDC_*
+#   docker compose -f docker-compose.cloud.yml up -d
+#
+# Point DNS for $DOMAIN at this host; ports 80/443 must be reachable for certificates.
+# Use APP_IMAGE=ghcr.io/oviing/kanban:latest to run the published image instead of building.
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kanban
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: kanban
+    volumes: [dbdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kanban"]
+      interval: 5s
+      retries: 10
+  app:
+    image: ${APP_IMAGE:-agent-kanban:local}
+    build: .
+    restart: unless-stopped
+    depends_on: { db: { condition: service_healthy } }
+    environment:
+      DATABASE_URL: postgres://kanban:${POSTGRES_PASSWORD}@db:5432/kanban
+      PUBLIC_URL: https://${DOMAIN:?set DOMAIN}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET (openssl rand -hex 32)}
+      OIDC_ISSUER: ${OIDC_ISSUER:?set OIDC_ISSUER}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:?set OIDC_CLIENT_ID}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:-}
+      OIDC_ADMIN_EMAILS: ${OIDC_ADMIN_EMAILS:-}
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [app]
+    ports: ["80:80", "443:443"]
+    environment: { DOMAIN: "${DOMAIN}" }
+    volumes: ["./deploy/Caddyfile:/etc/caddy/Caddyfile:ro", "caddy_data:/data"]
+volumes: { dbdata: {}, caddy_data: {} }

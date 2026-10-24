@@ -28,7 +28,8 @@ const authenticateBearer = cfg.oidc
   ? makeBearerAuth(db, { issuer: cfg.oidc.issuer, audience: cfg.oidc.audience })
   : (token: string) => verifyApiKey(db, token); // no IdP: API keys only
 
-const webDist = fileURLToPath(new URL("../../web/dist", import.meta.url));
+// WEB_DIST lets a bundled/packaged install (npx, image) place the UI anywhere; default is the repo layout.
+const webDist = process.env.WEB_DIST ?? fileURLToPath(new URL("../../web/dist", import.meta.url));
 const app = createApp({
   db,
   cfg,
