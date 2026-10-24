@@ -70,7 +70,7 @@ export function Board({ me }: { me: Principal }) {
   const add = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    act(async () => { await api("/tasks", { method: "POST", body: { title, boardId, confirmed: me.kind === "human" } }); setTitle(""); });
+    act(async () => { await api("/tasks", { method: "POST", body: { title, boardId, confirmed: true } }); setTitle(""); });
   };
 
   const select = (id: string) => { localStorage.setItem("kb_board", id); setBoardId(id); setOpen(null); };
@@ -173,7 +173,7 @@ export function Board({ me }: { me: Principal }) {
 
       <div className="filters">
         <form className="newtask" onSubmit={add}>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={me.kind === "human" ? "New task (created confirmed)…" : "New task (starts as proposed)…"} aria-label="New task title" />
+          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={"New task (created confirmed)…"} aria-label="New task title" />
           <button className="primary" disabled={!title.trim()}>Add task</button>
         </form>
         <select value={assignee} onChange={(e) => setAssignee(e.target.value)} aria-label="Filter by assignee">

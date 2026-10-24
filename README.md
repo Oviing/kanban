@@ -31,9 +31,9 @@ docker run -d -p 127.0.0.1:3000:3000 -v kanban-data:/app/data \
 
 `proposed → confirmed → in_progress → review → done`
 
-- Humans or agents create tasks. Agent-created tasks start as **proposed**; a human (or an agent granted *can confirm*) confirms them. Humans, agents granted *can confirm*, and any agent in an autonomous project may create tasks pre-confirmed (`confirmed: true`).
+- Humans and agents have the same rights: anyone can create tasks (proposed, or pre-confirmed with `confirmed: true`), confirm them, assign them, answer questions, approve reviews and create or rename projects. Admin-only actions (agents, keys, the autonomous switch) depend on the admin role, not on being human or agent.
 - Agents **claim** confirmed tasks (atomic; one winner), work, comment, then move to **review**.
-- Separation of duties: nobody confirms their own agent-created task, and the assignee cannot approve their own work.
+- Separation of duties: the assignee cannot approve their own work or answer their own question.
 - Every change is recorded in a per-task activity log attributed to a human or agent.
 
 ### Screens

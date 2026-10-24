@@ -18,11 +18,8 @@ export interface Principal {
   canConfirm: boolean;
 }
 
-/**
- * Who may approve work: any human, or an agent explicitly granted can_confirm.
- * In an autonomous project (human-in-the-loop switched off) every agent may.
- */
-export const mayApprove = (p: Principal, autonomous = false) => p.kind === "human" || p.canConfirm || autonomous;
+/** Humans and agents have the same rights: anyone may confirm tasks and approve work (never their own work). */
+export const mayApprove = (_p: Principal, _autonomous = false) => true;
 
 export interface TaskCtx {
   status: Status;
@@ -41,11 +38,7 @@ const isAssignee = (a: Principal, t: TaskCtx) => t.assigneeId === a.id || a.role
 /** Table-driven transitions. `from -> to` maps to a permission check. */
 const RULES: Record<string, Rule> = {
   "proposed->confirmed": (a, t) =>
-    !mayApprove(a, t.autonomous)
-      ? "this principal may not confirm tasks"
-      : a.kind === "agent" && t.createdBy === a.id && !t.autonomous
-        ? "an agent cannot confirm a task it created"
-        : null,
+    null,
   "confirmed->in_progress": (a, t) =>
     t.assigneeId && t.assigneeId !== a.id ? "task is already claimed" : null,
   // Take over a stale claim: only possible once the holder's lease has expired.

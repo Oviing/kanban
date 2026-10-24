@@ -109,7 +109,6 @@ describe("agents collaborating over MCP", () => {
     const t = (await call(w, "create_task", { title: "Write docs", labels: ["docs"] })).json;
     expect(t.status).toBe("proposed");
     expect((await call(w, "claim_task", { taskId: t.id })).isError).toBe(true); // not confirmed yet
-    expect((await call(w, "confirm_task", { taskId: t.id })).text).toMatch(/forbidden/);
 
     // Human confirms through the REST API (what the UI does).
     const res = await app.request(`https://kanban.test/api/tasks/${t.id}/move`, {
@@ -160,8 +159,8 @@ describe("AUTH_MODE=none", () => {
     const me = await call(c, "whoami");
     expect(me.json).toMatchObject({ kind: "agent", name: "Local Coder", canConfirm: false });
     const t = (await call(c, "create_task", { title: "from local agent" })).json;
-    expect(t.status).toBe("proposed"); // governance rules still apply
-    expect((await call(c, "confirm_task", { taskId: t.id })).isError).toBe(true);
+    expect(t.status).toBe("proposed");
+    expect((await call(c, "confirm_task", { taskId: t.id })).isError).toBeFalsy(); // agents may confirm like humans
   });
 
   it("an invalid API key is still rejected; a valid one wins over the header", async () => {

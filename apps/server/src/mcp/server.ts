@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
-  STATUSES, KanbanError, addComment, answerInput, assignTask, heartbeatTask, inbox, requestInput, claimTask, confirmTask, createTask, getTask, listBoards,
+  STATUSES, KanbanError, addComment, answerInput, assignTask, heartbeatTask, inbox, requestInput, claimTask, confirmTask, createTask, getTask, listBoards, createBoard, renameBoard,
   listPrincipals, listTasks, moveTask, releaseTask, updateTask, type Db, type Principal, type Status,
 } from "@kanban/core";
 
@@ -9,13 +9,13 @@ const status = z.enum(STATUSES);
 const id = z.string().uuid();
 
 const WORKFLOW = `Workflow: proposed -> confirmed -> in_progress -> review -> done.
-- Tasks you create start as "proposed" and need a human (or an approving agent) to confirm them.
+- You have the same rights as a human: create tasks (optionally pre-confirmed with confirmed: true), confirm tasks (including your own), assign tasks to anyone, answer questions, approve reviews, and create or rename projects.
 - Pick up work with claim_task on a "confirmed" task. If you can't finish, release_task.
 - Your claim is a lease (30 min by default). Any comment, update or heartbeat_task renews it; if you go quiet, another agent may take the task over.
 - When finished, move_task to "review" with a summary (required) and links to evidence (PRs, files, logs).
 - If you are blocked or need a decision, call request_input with a clear question; humans see it in their inbox. Use inbox to see what needs your decision (if you are allowed to confirm/approve).
 - You may not approve your own work: review -> done must be done by someone else.
-- Each project has a humanInLoop flag (see list_boards). When it is true, only humans (or agents an admin allowed to confirm) confirm and approve. When false the project is autonomous: any agent may confirm tasks (even its own) and approve other agents' work, and any other agent may answer questions. You still can never approve your own work.
+- You can never approve your own work or answer your own question; someone else must.
 - Use add_comment to report progress, blockers and questions.`;
 
 export function buildMcpServer(db: Db, me: Principal): McpServer {
@@ -34,6 +34,8 @@ export function buildMcpServer(db: Db, me: Principal): McpServer {
 
   tool("whoami", "Return the identity you are acting as.", {}, async () => me);
   tool("list_boards", "List projects (boards). Pass a project id as boardId to create_task / list_tasks to work within it.", {}, () => listBoards(db));
+  tool("create_board", "Create a project (board).", { name: z.string().min(1) }, ({ name }) => createBoard(db, me, name));
+  tool("rename_board", "Rename a project.", { boardId: id, name: z.string().min(1) }, ({ boardId, name }) => renameBoard(db, me, boardId, name));
   tool("list_principals", "List humans and agents (ids are needed for assign_task).", {}, () => listPrincipals(db));
   tool(
     "list_tasks",
@@ -44,8 +46,8 @@ export function buildMcpServer(db: Db, me: Principal): McpServer {
   tool("get_task", "Get a task with its comments and activity log.", { taskId: id }, ({ taskId }) => getTask(db, taskId));
   tool(
     "create_task",
-    "Create a task. It starts as 'proposed' until confirmed, unless you may confirm tasks (can_confirm, or an autonomous project) and pass confirmed: true.",
-    { title: z.string().min(1), description: z.string().optional(), priority: z.number().int().min(0).max(4).optional(), labels: z.array(z.string()).optional(), boardId: id.optional().describe("Project to create the task in; defaults to the first project"), confirmed: z.boolean().optional().describe("Create the task already confirmed (only if you are allowed to confirm tasks)") },
+    "Create a task. It starts as 'proposed' until confirmed; pass confirmed: true to create it already confirmed.",
+    { title: z.string().min(1), description: z.string().optional(), priority: z.number().int().min(0).max(4).optional(), labels: z.array(z.string()).optional(), boardId: id.optional().describe("Project to create the task in; defaults to the first project"), confirmed: z.boolean().optional().describe("Create the task already confirmed") },
     (a) => createTask(db, me, a),
   );
   tool(

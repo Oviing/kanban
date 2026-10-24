@@ -33,7 +33,7 @@ export function TaskDrawer({ id, me, people, rev, onClose, onChange }: {
 
   const who = (n: string, k: string) => <b className={`who ${k}`}>{n}</b>;
   const actions = NEXT[t.status].filter((a) => t.moves?.[a.to as keyof typeof t.moves]?.ok);
-  const canAnswer = t.needsInput && (me.kind === "human" || me.canConfirm || !t.humanInLoop) && t.assigneeId !== me.id;
+  const canAnswer = t.needsInput && t.assigneeId !== me.id;
   const doMove = (a: { to: string }) => {
     const body: Record<string, unknown> = { to: a.to };
     if (a.to === "review") { const s = askSummary(); if (s === null) return; if (s) body.summary = s; }

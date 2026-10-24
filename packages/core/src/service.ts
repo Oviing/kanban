@@ -158,7 +158,7 @@ export async function verifyApiKey(db: Db, key: string): Promise<Principal | nul
 }
 
 function requireAdmin(a: Principal) {
-  if (a.role !== "admin" || a.kind !== "human") throw new KanbanError("forbidden", "admin only");
+  if (a.role !== "admin") throw new KanbanError("forbidden", "admin only");
 }
 
 // ---------- boards ----------
@@ -172,7 +172,6 @@ export async function listBoards(db: Db) {
 }
 
 export async function createBoard(db: Db, actor: Principal, name: string, humanInLoop = true) {
-  if (actor.kind !== "human") throw new KanbanError("forbidden", "only humans create projects");
   if (!name?.trim()) throw new KanbanError("invalid", "name is required");
   if (!humanInLoop) requireAdmin(actor);
   const { rows } = await db.query(`INSERT INTO boards (name, human_in_loop) VALUES ($1,$2) RETURNING ${BOARD_COLS}`, [name.trim(), humanInLoop]);
@@ -180,7 +179,6 @@ export async function createBoard(db: Db, actor: Principal, name: string, humanI
 }
 
 export async function renameBoard(db: Db, actor: Principal, id: string, name: string) {
-  if (actor.kind !== "human") throw new KanbanError("forbidden", "only humans manage projects");
   if (!name?.trim()) throw new KanbanError("invalid", "name is required");
   const { rows } = await db.query(`UPDATE boards SET name=$2 WHERE id=$1 RETURNING ${BOARD_COLS}`, [id, name.trim()]);
   if (!rows[0]) throw new KanbanError("not_found", "project not found");
@@ -447,7 +445,7 @@ export async function inbox(db: Db, actor: Principal): Promise<InboxItem[]> {
     if (t.status === "proposed" && can(t, "confirmed")) out.push({ kind: "confirm", task: t });
     if (t.status === "review" && can(t, "done")) out.push({ kind: "review", task: t });
     if (t.needsInput && mayApprove(actor, !t.humanInLoop) && t.assigneeId !== actor.id) out.push({ kind: "input", task: t });
-    if (t.status === "in_progress" && taskCtx(t).leaseExpired && actor.kind === "human") out.push({ kind: "stale", task: t });
+    if (t.status === "in_progress" && taskCtx(t).leaseExpired) out.push({ kind: "stale", task: t });
   }
   return out;
 }
@@ -464,8 +462,6 @@ export async function assignTask(db: Db, actor: Principal, id: string, assigneeI
     const cur = await load(t, id, true);
     if (cur.status === "proposed" || cur.status === "done")
       throw new KanbanError("invalid", `cannot assign a ${cur.status} task`);
-    if (actor.kind === "agent" && assigneeId !== actor.id)
-      throw new KanbanError("forbidden", "agents can only assign tasks to themselves");
     if (assigneeId) {
       const { rows } = await t.query(`SELECT 1 FROM principals WHERE id=$1`, [assigneeId]);
       if (!rows[0]) throw new KanbanError("not_found", "assignee not found");
