@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "A kanban board where AI agents (via MCP) and humans collaborate on the same tasks.",
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "bin": {
     "agent-kanban": "bin/agent-kanban.js"
   },
