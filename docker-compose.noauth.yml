@@ -1,0 +1,21 @@
+# Run without authentication (local machine or a private network). Data lives in the `data` volume
+# (embedded database), so no Postgres is needed. See README "Running without authentication".
+#
+#   docker compose -f docker-compose.noauth.yml up -d --build
+#
+# Local only (default): reachable at http://localhost:3000 from this machine.
+# EC2 / remote: change the port mapping below to "3000:3000" AND restrict who can reach it (security group,
+# VPN, or SSH tunnel), and set PUBLIC_URL to the address you browse to.
+services:
+  kanban:
+    build: .
+    restart: unless-stopped
+    ports: ["127.0.0.1:3000:3000"]
+    environment:
+      AUTH_MODE: none
+      HOST: 0.0.0.0              # inside the container; exposure is controlled by the port mapping above
+      ALLOW_NO_AUTH_REMOTE: "true"
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
+      # ALLOWED_HOSTS: kanban.internal:3000   # extra Host headers to accept, comma-separated
+    volumes: [data:/app/data]
+volumes: { data: {} }

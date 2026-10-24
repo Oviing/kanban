@@ -1,0 +1,29 @@
+# Local development stack: Postgres + Keycloak (dev OIDC provider) + the app.
+# Keycloak admin console: http://localhost:8080 (admin/admin).
+services:
+  db:
+    image: postgres:16
+    environment: { POSTGRES_USER: kanban, POSTGRES_PASSWORD: kanban, POSTGRES_DB: kanban }
+    ports: ["5432:5432"]
+    volumes: [dbdata:/var/lib/postgresql/data]
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: start-dev --import-realm
+    environment: { KEYCLOAK_ADMIN: admin, KEYCLOAK_ADMIN_PASSWORD: admin }
+    ports: ["8080:8080"]
+    volumes: [./dev/keycloak-realm.json:/opt/keycloak/data/import/realm.json:ro]
+  app:
+    build: .
+    depends_on: [db, keycloak]
+    ports: ["3000:3000"]
+    environment:
+      DATABASE_URL: postgres://kanban:kanban@db:5432/kanban
+      PUBLIC_URL: http://localhost:3000
+      SESSION_SECRET: dev-only-session-secret-dev-only-session-secret
+      # Browser and container must resolve the issuer identically; add `127.0.0.1 keycloak` to /etc/hosts for local dev.
+      OIDC_ISSUER: http://keycloak:8080/realms/kanban
+      OIDC_CLIENT_ID: kanban-web
+      OIDC_CLIENT_SECRET: dev-web-secret
+      OIDC_AUDIENCE: kanban
+      OIDC_ALLOW_INSECURE: "true"
+volumes: { dbdata: {} }
