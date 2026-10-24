@@ -72,7 +72,7 @@ export function buildMcpServer(db: Db, me: Principal): McpServer {
     ({ taskId, assigneeId }) => assignTask(db, me, taskId, assigneeId),
   );
   tool("heartbeat_task", "Renew your claim lease on an in_progress task you hold, during long-running work.", { taskId: id }, ({ taskId }) => heartbeatTask(db, me, taskId));
-  tool("request_input", "Ask a question; flags the task as blocked on input.", { taskId: id, question: z.string().min(1) }, ({ taskId, question }) => requestInput(db, me, taskId, question));
+  tool("request_input", "Ask a question; flags the task as blocked on input. Optionally offer up to 6 short suggested answers (options) that humans can pick with one click.", { taskId: id, question: z.string().min(1), options: z.array(z.string().max(80)).max(6).optional() }, ({ taskId, question, options }) => requestInput(db, me, taskId, question, options));
   tool("answer_input", "Answer a pending question on a task (anyone except whoever asked the question).", { taskId: id, answer: z.string().min(1) }, ({ taskId, answer }) => answerInput(db, me, taskId, answer));
   tool("inbox", "Tasks waiting on your decision: to confirm, to review, with questions, or stale claims.", {}, async () => (await inbox(db, me)).map((i) => ({ kind: i.kind, id: i.task.id, title: i.task.title, status: i.task.status, question: i.task.question, reviewSummary: i.task.reviewSummary })));
   tool("add_comment", "Comment on a task.", { taskId: id, body: z.string().min(1) }, ({ taskId, body }) => addComment(db, me, taskId, body));

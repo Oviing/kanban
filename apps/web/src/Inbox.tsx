@@ -1,5 +1,6 @@
 import { api, type InboxItem, type Principal, type Status } from "./api";
 import { askAnswer } from "./prompts";
+import { Markdown } from "./Markdown";
 
 const TITLES = { confirm: "Confirm to start", review: "Ready for review", input: "Question from agent", stale: "Stale claim" } as const;
 
@@ -49,8 +50,8 @@ export function InboxSidebar({ open, onToggle, items, boards, people, onOpen, ac
                 <span className="chip">{TITLES[kind]}</span>
                 <strong>{t.title}</strong>
                 <span className="meta">{[boards.length > 1 && boards.find((b) => b.id === t.boardId)?.name, by?.name].filter(Boolean).join(" · ")}</span>
-                {kind === "input" && <div className="summary">{t.question}</div>}
-                {kind === "review" && t.reviewSummary && <div className="summary">{t.reviewSummary}</div>}
+                {kind === "input" && <div className="summary"><Markdown text={t.question ?? ""} /></div>}
+                {kind === "review" && t.reviewSummary && <div className="summary"><Markdown text={t.reviewSummary} /></div>}
                 {kind === "review" && t.reviewLinks.length > 0 && (
                   <div className="links" onClick={(e) => e.stopPropagation()}>
                     {t.reviewLinks.map((l) => <a key={l} href={/^https?:/.test(l) ? l : undefined} target="_blank" rel="noreferrer noopener">{l.replace(/^https?:\/\//, "")}</a>)}
@@ -63,8 +64,11 @@ export function InboxSidebar({ open, onToggle, items, boards, people, onOpen, ac
                   <button className="primary" onClick={() => move(t.id, "done")}>Approve</button>
                   <button onClick={() => move(t.id, "in_progress")}>Request changes</button>
                 </>}
+                {kind === "input" && t.questionOptions?.slice(0, 3).map((o) => (
+                  <button key={o} className="opt" onClick={() => act(() => api(`/tasks/${t.id}/answer`, { method: "POST", body: { answer: o } }))}>{o}</button>
+                ))}
                 {kind === "input" && (
-                  <button className="primary" onClick={() => { const a = askAnswer(t.question)?.trim(); if (a) act(() => api(`/tasks/${t.id}/answer`, { method: "POST", body: { answer: a } })); }}>Answer</button>
+                  <button className="primary" onClick={async () => { const a = (await askAnswer(t.question))?.trim(); if (a) act(() => api(`/tasks/${t.id}/answer`, { method: "POST", body: { answer: a } })); }}>Answer</button>
                 )}
                 {kind === "stale" && <button onClick={() => move(t.id, "confirmed")}>Release to board</button>}
               </div>

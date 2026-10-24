@@ -64,8 +64,10 @@ export function apiRoutes(db: Db, opts: { authMode: "oidc" | "none"; leaseMinute
     return c.json(await moveTask(db, me(c), c.req.param("id"), b.to, { summary: b.summary, links: b.links }));
   });
   api.post("/tasks/:id/heartbeat", async (c) => c.json(await heartbeatTask(db, me(c), c.req.param("id"))));
-  api.post("/tasks/:id/input", async (c) =>
-    c.json(await requestInput(db, me(c), c.req.param("id"), z.object({ question: z.string().min(1) }).parse(await c.req.json()).question)));
+  api.post("/tasks/:id/input", async (c) => {
+    const b = z.object({ question: z.string().min(1), options: z.array(z.string()).max(6).optional() }).parse(await c.req.json());
+    return c.json(await requestInput(db, me(c), c.req.param("id"), b.question, b.options));
+  });
   api.post("/tasks/:id/answer", async (c) =>
     c.json(await answerInput(db, me(c), c.req.param("id"), z.object({ answer: z.string().min(1) }).parse(await c.req.json()).answer)));
   api.post("/tasks/:id/assign", async (c) =>

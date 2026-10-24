@@ -11,7 +11,7 @@ export interface Principal { id: string; kind: "human" | "agent"; name: string; 
 export interface Task {
   id: string; boardId: string; title: string; description: string; status: Status; priority: number;
   labels: string[]; createdBy: string; assigneeId: string | null; confirmedBy: string | null; version: number;
-  needsInput: boolean; question: string | null; leaseExpiresAt: string | null;
+  needsInput: boolean; question: string | null; questionOptions: string[]; leaseExpiresAt: string | null;
   reviewSummary: string | null; reviewLinks: string[];
   /** What the current user may do with this task: target status -> allowed (+ reason if not). */
   moves: Record<Status, { ok: boolean; reason?: string }>;
@@ -52,7 +52,7 @@ export interface Overview {
   pipeline: Record<Status, number>;
 }
 export interface ActivityItem {
-  id: number; type: string; payload: { from?: string; to?: string; summary?: string; question?: string; status?: string }; createdAt: string;
+  id: number; type: string; payload: { from?: string; to?: string; summary?: string; question?: string; options?: string[]; status?: string }; createdAt: string;
   taskId: string; taskTitle: string; actorName: string; actorKind: "human" | "agent";
 }
 

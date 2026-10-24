@@ -81,6 +81,9 @@ const MIGRATIONS: string[] = [
   `
   ALTER TABLE tasks ADD COLUMN question_by uuid REFERENCES principals(id);
   `,
+  `
+  ALTER TABLE tasks ADD COLUMN question_options text[] NOT NULL DEFAULT '{}';
+  `,
 ];
 
 export async function migrate(db: Db): Promise<void> {
