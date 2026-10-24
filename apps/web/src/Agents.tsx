@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
+import { Avatar } from "./ui";
 import { COLUMNS, ago, api, describeEvent, leaseMinutesLeft, type ActivityItem, type AgentRow, type Overview, type Principal } from "./api";
 
 const STATE_LABEL = { working: "working", blocked: "blocked on you", stale: "silent", idle: "idle" } as const;
 
 function Spark({ data }: { data: number[] }) {
   const max = Math.max(1, ...data);
-  const pts = data.map((v, i) => `${(i / (data.length - 1)) * 300},${20 - (v / max) * 16}`).join(" ");
   return (
-    <svg className="spark" viewBox="0 0 300 22" preserveAspectRatio="none" role="img" aria-label="Activity over the last hour">
-      <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
-    </svg>
+    <div className="bars" role="img" aria-label="Activity over the last hour">
+      {data.map((v, i) => <i key={i} style={{ height: `${Math.max(8, (v / max) * 100)}%` }} />)}
+    </div>
   );
 }
 
@@ -74,9 +74,9 @@ export function Agents({ me }: { me: Principal }) {
         {error && <div className="error" onClick={() => setError(undefined)}>{error}</div>}
 
         <section className="kpis" aria-label="Summary">
-          <div><span>Agents working</span><b className="teal">{k?.agentsActive ?? "–"}<small> / {k?.agentsTotal ?? "–"}</small></b></div>
-          <div className="violet"><span>Waiting on a human</span><b>{k?.waitingOnHuman ?? "–"}</b></div>
-          <div className="amber"><span>Stale leases</span><b>{k?.staleLeases ?? "–"}</b></div>
+          <div><span>Agents working</span><b>{k?.agentsActive ?? "–"}<small> / {k?.agentsTotal ?? "–"}</small></b></div>
+          <div className={`needs${k?.waitingOnHuman ? " on" : ""}`}><span>Waiting on a human</span><b>{k?.waitingOnHuman ?? "–"}</b></div>
+          <div className={`stalek${k?.staleLeases ? " on" : ""}`}><span>Stale leases</span><b>{k?.staleLeases ?? "–"}</b></div>
           <div><span>Done today</span><b>{k?.doneToday ?? "–"}</b></div>
         </section>
 
@@ -91,7 +91,7 @@ export function Agents({ me }: { me: Principal }) {
               return (
                 <div key={a.id} className={`lane ${a.state}`}>
                   <div className="who">
-                    <i className={`dot ${a.state}`} />
+                    <Avatar name={a.name} size={34} />
                     <div><b>{a.name}</b><small className={a.state}>{STATE_LABEL[a.state]}{a.canConfirm ? " · can approve" : ""}</small></div>
                   </div>
                   <div className="cur">
@@ -100,7 +100,7 @@ export function Agents({ me }: { me: Principal }) {
                     {t && !t.needsInput && a.state !== "stale" && <Spark data={a.activity} />}
                     {a.state === "stale" && t && (
                       <div className="row-actions">
-                        <button className="solid-amber" onClick={() => release(t.id)}>Release to board</button>
+                        <button className="primary small" onClick={() => release(t.id)}>Release to board</button>
                       </div>
                     )}
                   </div>

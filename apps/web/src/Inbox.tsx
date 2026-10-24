@@ -1,7 +1,7 @@
 import { api, type InboxItem, type Principal, type Status } from "./api";
 import { askAnswer } from "./prompts";
 
-const TITLES = { confirm: "Confirm to start", review: "Review the work", input: "Agent needs input", stale: "Stale claim" } as const;
+const TITLES = { confirm: "Confirm to start", review: "Ready for review", input: "Question from agent", stale: "Stale claim" } as const;
 
 interface Props {
   open: boolean;

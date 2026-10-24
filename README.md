@@ -39,7 +39,7 @@ docker run -d -p 127.0.0.1:3000:3000 -v kanban-data:/app/data \
 ### Screens
 
 - **Board:** project tabs, a hideable "Needs you" sidebar on the left (approvals, questions, stale claims; collapses to a rail with a count, remembered per browser, `[` toggles it) so the board keeps the full focus, five columns with rule-aware drag & drop (Done is collapsed until you open it), lease bars on active cards, and a side panel with the agent's review evidence, comments and a plain-language activity timeline. Esc closes the panel.
-- **Agents:** a dark supervision view per project: working / waiting-on-human / stale / done-today counters, one row per agent (state, current task or open question, lease countdown, last-hour activity trace), a live activity feed filterable by humans or agents, and a pipeline bar. Stale rows have a one-click *Release to board*. Backed by `GET /api/overview` and `GET /api/activity`.
+- **Agents:** a supervision view per project (light or dark, following your system): working / waiting-on-human / stale / done-today counters, one row per agent (state, current task or open question, lease countdown, last-hour activity trace), a live activity feed filterable by humans or agents, and a pipeline bar. Stale rows have a one-click *Release to board*. Backed by `GET /api/overview` and `GET /api/activity`.
 - **Keys:** agents and API keys (admins).
 
 ### Supervision features

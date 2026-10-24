@@ -29,7 +29,7 @@ export function TaskDrawer({ id, me, people, rev, onClose, onChange }: {
     setError(undefined);
     try { await fn(); await onChange(); } catch (e) { setError((e as Error).message); }
   };
-  if (!t) return <aside className="drawer"><button className="close" onClick={onClose} aria-label="Close">✕</button>{error}</aside>;
+  if (!t) return <><div className="scrim" onClick={onClose} /><aside className="drawer"><button className="close" onClick={onClose} aria-label="Close">✕</button>{error}</aside></>;
 
   const who = (n: string, k: string) => <b className={`who ${k}`}>{n}</b>;
   const actions = NEXT[t.status].filter((a) => t.moves?.[a.to as keyof typeof t.moves]?.ok);
@@ -41,6 +41,8 @@ export function TaskDrawer({ id, me, people, rev, onClose, onChange }: {
   };
 
   return (
+    <>
+    <div className="scrim" onClick={onClose} />
     <aside className="drawer" aria-label="Task details">
       <div className="drawer-head">
         <div>
@@ -50,13 +52,13 @@ export function TaskDrawer({ id, me, people, rev, onClose, onChange }: {
         <button className="close" onClick={onClose} aria-label="Close">✕</button>
       </div>
       <div className="facts">
-        <span>Assignee <b>{t.assigneeId ? people[t.assigneeId]?.name : "none"}</b></span>
-        <span>Created by <b>{people[t.createdBy]?.name ?? "?"}</b></span>
-        <span>Priority <b>{t.priority}</b></span>
+        <span><small>Assignee</small><b>{t.assigneeId ? people[t.assigneeId]?.name : "none"}</b></span>
+        <span><small>Created by</small><b>{people[t.createdBy]?.name ?? "?"}</b></span>
+        <span><small>Priority</small><b>{t.priority}</b></span>
       </div>
 
       {error && <div className="error">{error}</div>}
-      {t.needsInput && <div className="ask-box"><b>Question</b><br />{t.question}</div>}
+      {t.needsInput && <div className="ask-box"><b>{t.assigneeId ? `Question from ${people[t.assigneeId]?.name}` : "Question"}</b>{t.question}</div>}
       {isStale(t) && <div className="stale-box">Claim lease expired. The assignee has been silent since {ago(t.leaseExpiresAt)}.</div>}
 
       {t.reviewSummary && (
@@ -101,5 +103,6 @@ export function TaskDrawer({ id, me, people, rev, onClose, onChange }: {
         )}
       </div>
     </aside>
+    </>
   );
 }
