@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import {
-  addComment, listActivity, overview, answerInput, assignTask, heartbeatTask, inbox, requestInput, createBoard, listBoards, listTasks, renameBoard, claimTask, confirmTask, createAgent, createApiKey, createTask, getTask, KanbanError,
+  addComment, listActivity, overview, answerInput, assignTask, heartbeatTask, inbox, requestInput, createBoard, listBoards, listTasks, renameBoard, claimTask, confirmTask, createAgent, createApiKey, updatePrincipal, createTask, getTask, KanbanError,
   migrate, moveTask, pgliteDb, revokeApiKey, upsertOidcPrincipal, verifyApiKey, type Db, type Principal,
 } from "../src/index.js";
 
@@ -211,5 +211,15 @@ describe("supervision views", () => {
     expect(feed).toHaveLength(5);
     expect(feed[0].id).toBeGreaterThan(feed[1].id);
     expect(feed[0]).toMatchObject({ actorName: "Hal", type: "moved" });
+  });
+});
+
+describe("user management", () => {
+  it("promotes and demotes people, never agents, never the last admin", async () => {
+    expect((await updatePrincipal(db, admin, human.id, { role: "admin" })).role).toBe("admin");
+    expect((await updatePrincipal(db, admin, human.id, { role: "member" })).role).toBe("member");
+    expect(await code(updatePrincipal(db, admin, agentA.id, { role: "admin" }))).toBe("invalid");
+    expect(await code(updatePrincipal(db, admin, admin.id, { role: "member" }))).toBe("invalid");
+    expect(await code(updatePrincipal(db, human, human.id, { role: "admin" }))).toBe("forbidden");
   });
 });

@@ -109,13 +109,19 @@ export async function updatePrincipal(
   i: { role?: "admin" | "member" },
 ) {
   requireAdmin(actor);
-  const { rows } = await db.query<Principal>(
-    `UPDATE principals SET role = COALESCE($2, role)
-     WHERE id=$1 RETURNING ${PRINCIPAL_COLS}`,
-    [id, i.role ?? null],
-  );
-  if (!rows[0]) throw new KanbanError("not_found", "principal not found");
-  return rows[0];
+  return db.tx(async (t) => {
+    const { rows: cur } = await t.query<Principal>(`SELECT ${PRINCIPAL_COLS} FROM principals WHERE id=$1 FOR UPDATE`, [id]);
+    if (!cur[0]) throw new KanbanError("not_found", "principal not found");
+    if (i.role && i.role !== cur[0].role) {
+      if (cur[0].kind !== "human") throw new KanbanError("invalid", "only people have roles");
+      if (i.role === "member") {
+        const { rows } = await t.query(`SELECT 1 FROM principals WHERE kind='human' AND role='admin' AND id<>$1 LIMIT 1`, [id]);
+        if (!rows[0]) throw new KanbanError("invalid", "at least one admin is required");
+      }
+    }
+    const { rows } = await t.query<Principal>(`UPDATE principals SET role = COALESCE($2, role) WHERE id=$1 RETURNING ${PRINCIPAL_COLS}`, [id, i.role ?? null]);
+    return rows[0];
+  });
 }
 
 const hashKey = (k: string) => createHash("sha256").update(k).digest("hex");

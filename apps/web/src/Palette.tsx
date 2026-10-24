@@ -68,7 +68,7 @@ export function Palette({ me, onClose, onGo, onJump, onTheme, themeLabel, onNewT
     const go: Row[] = [
       { id: "g-board", group: "Go to", label: "Board", key: "g b", icon: ICON.project, run: () => onGo("board") },
       { id: "g-agents", group: "Go to", label: "Agents", key: "g a", icon: ICON.go, run: () => onGo("agents") },
-      ...(me.role === "admin" && me.kind === "human" ? [{ id: "g-keys", group: "Go to", label: "Keys", key: "g k", icon: ICON.go, run: () => onGo("keys") } as Row] : []),
+      ...(me.role === "admin" && me.kind === "human" ? [{ id: "g-keys", group: "Go to", label: "Admin", key: "g k", icon: ICON.go, run: () => onGo("keys") } as Row] : []),
       ...boards.map((b) => ({ id: "p" + b.id, group: "Projects", label: b.name, icon: ICON.project, run: () => onJump(b.id) }) as Row),
       { id: "n-task", group: "Create", label: "New task", key: "c", icon: ICON.plus, run: onNewTask },
       { id: "x-theme", group: "Appearance", label: `Theme: ${themeLabel} (switch)`, icon: ICON.theme, run: onTheme },

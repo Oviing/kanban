@@ -3,6 +3,7 @@ import { Avatar } from "./ui";
 import { COLUMNS, ago, api, describeEvent, leaseMinutesLeft, type ActivityItem, type AgentRow, type Overview, type Principal } from "./api";
 import { buildTimeline, type SegKind } from "./logic";
 import { askAnswer } from "./prompts";
+import { onChange } from "./events";
 
 const STATE_LABEL = { working: "Working", blocked: "Waiting on you", stale: "Silent · lease expired", idle: "Idle" } as const;
 const SEG_LABEL: Record<SegKind, string> = { working: "Working", review: "Sent to review", done: "Done", released: "Released", stale: "No heartbeat · lease expired" };
@@ -28,10 +29,9 @@ export function Agents(_: { me: Principal }) {
 
   useEffect(() => { load().catch((e) => setError(e.message)); }, [load]);
   useEffect(() => {
-    const es = new EventSource("/api/events");
-    es.addEventListener("change", () => load().catch(() => {}));
+    const off = onChange(() => load().catch(() => {}));
     const i = setInterval(() => load().catch(() => {}), 20_000); // countdowns and "ago" drift with the clock
-    return () => { es.close(); clearInterval(i); };
+    return () => { off(); clearInterval(i); };
   }, [load]);
 
   const run = async (fn: () => Promise<unknown>) => {
@@ -77,7 +77,7 @@ export function Agents(_: { me: Principal }) {
               </ul>
             </div>
             <div className="tl-row axis"><span /><div className="axis-in" aria-hidden="true">{AXIS.map(([l, p]) => <span key={l} style={{ left: `${p}%` }}>{l}</span>)}<span className="nowl">now</span></div></div>
-            {ov?.agents.length === 0 && <p className="dim pad">No agents have connected yet. Create one under Keys, or point an MCP client at /mcp.</p>}
+            {ov?.agents.length === 0 && <p className="dim pad">No agents have connected yet. Create one under Admin, or point an MCP client at /mcp.</p>}
             {lanes.map(({ agent: a, segs, marks }) => {
               const rank = (x: AgentRow["tasks"][number]) => ((leaseMinutesLeft(x) ?? 1) < 0 ? 0 : x.needsInput ? 1 : 2);
               const t = [...a.tasks].sort((x, y) => rank(x) - rank(y))[0];

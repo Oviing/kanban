@@ -1,5 +1,5 @@
 import { Fragment, useMemo } from "react";
-import { parseMarkdown, type Inline } from "./markdown";
+import { parseMarkdown, type Inline } from "./mdparse";
 
 function inline(nodes: Inline[]): React.ReactNode {
   return nodes.map((n, i) => {

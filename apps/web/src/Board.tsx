@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { COLUMNS, api, isLive, isStale, leaseMinutesLeft, type InboxItem, type Principal, type Status, type Task } from "./api";
+import { onChange } from "./events";
 import { TaskDrawer } from "./TaskDrawer";
 import { InboxSidebar } from "./Inbox";
 import { askName, askSummary } from "./prompts";
@@ -65,9 +66,7 @@ export function Board({ me, route }: { me: Principal; route: Route }) {
 
   useEffect(() => { load().catch((e) => setError(e.message)); }, [load]);
   useEffect(() => {
-    const es = new EventSource("/api/events");
-    es.addEventListener("change", () => load().catch(() => {}));
-    return () => es.close();
+    return onChange(() => load().catch(() => {}));
   }, [load]);
   // Links and the command palette address a project and/or task through the URL.
   useEffect(() => {

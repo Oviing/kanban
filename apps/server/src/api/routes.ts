@@ -31,6 +31,8 @@ export function apiRoutes(db: Db, opts: { authMode: "oidc" | "none"; leaseMinute
       return c.json({ error: e.code, message: e.message }, s);
     }
     if (e instanceof z.ZodError) return c.json({ error: "invalid", message: e.message }, 400);
+    // Postgres 22P02: a path id that isn't a UUID can't name anything.
+    if ((e as { code?: string }).code === "22P02") return c.json({ error: "invalid", message: "malformed id" }, 400);
     console.error(e);
     return c.json({ error: "internal" }, 500);
   });

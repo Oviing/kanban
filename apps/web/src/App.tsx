@@ -3,6 +3,7 @@ import { ApiError, api, type Principal } from "./api";
 import { Board } from "./Board";
 import { Agents } from "./Agents";
 import { Admin } from "./Admin";
+import { onLive } from "./events";
 import { Avatar, Kbd, isTyping } from "./ui";
 import { DialogHost } from "./dialog";
 import { Palette } from "./Palette";
@@ -11,7 +12,7 @@ import { NEXT_THEME, useTheme } from "./theme";
 
 const SHORTCUTS: [string, string][] = [
   ["⌘K  or  Ctrl K", "Command palette"], ["c", "New task"], ["j  /  k", "Next / previous card"], ["Enter", "Open the focused card"],
-  ["[", "Show or hide Needs you"], ["g then b / a / k", "Go to Board / Agents / Keys"], ["Esc", "Close the open sheet or dialog"], ["?", "This list"],
+  ["[", "Show or hide Needs you"], ["g then b / a / k", "Go to Board / Agents / Admin"], ["Esc", "Close the open sheet or dialog"], ["?", "This list"],
 ];
 const THEME_LABEL = { system: "System", light: "Light", dark: "Dark" } as const;
 
@@ -32,10 +33,7 @@ export function App() {
   }, []);
   useEffect(() => {
     if (!me) return;
-    const es = new EventSource("/api/events");
-    es.onopen = () => setLive(true);
-    es.onerror = () => setLive(false);
-    return () => es.close();
+    return onLive(setLive);
   }, [me]);
 
   const logout = useCallback(async () => {
@@ -86,7 +84,7 @@ export function App() {
   );
   const tabs: [Page, string, string][] = [
     ["board", "Board", "M3 4h5v16H3zM10 4h5v10h-5zM17 4h4v13h-4z"], ["agents", "Agents", "M12 4a4 4 0 100 8 4 4 0 000-8zM4 21c1-4 4-6 8-6s7 2 8 6"],
-    ...(canKeys ? [["keys", "Keys", "M14 10a4 4 0 11-3.5 6L3 16v-3h3v-2h2l2.5-1.2A4 4 0 0114 10z"] as [Page, string, string]] : []),
+    ...(canKeys ? [["keys", "Admin", "M14 10a4 4 0 11-3.5 6L3 16v-3h3v-2h2l2.5-1.2A4 4 0 0114 10z"] as [Page, string, string]] : []),
   ];
   return (
     <>
@@ -96,7 +94,7 @@ export function App() {
         <nav className="seg" aria-label="Views">
           {tab("board", "Board")}
           {tab("agents", "Agents")}
-          {canKeys && tab("keys", "Keys")}
+          {canKeys && tab("keys", "Admin")}
         </nav>
         <div className="right">
           {live !== null && <span className="livepill" title={live ? "Connected, updates arrive instantly" : "Connection lost, retrying"}><i className={live ? "pulse" : "off"} />{live ? "Live" : "Reconnecting…"}</span>}
@@ -116,7 +114,7 @@ export function App() {
       <div id="main">
         {page === "board" && <Board me={me} route={route} />}
         {page === "agents" && <Agents me={me} />}
-        {page === "keys" && <Admin />}
+        {page === "keys" && <Admin me={me} />}
       </div>
       <nav className="tabbar" aria-label="Main">
         {tabs.map(([p, label, d]) => (

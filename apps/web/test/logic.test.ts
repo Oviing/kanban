@@ -57,7 +57,7 @@ describe("buildTimeline", () => {
   });
 });
 
-import { parseInline, parseMarkdown } from "../src/markdown";
+import { parseInline, parseMarkdown } from "../src/mdparse";
 
 describe("markdown", () => {
   it("parses inline styles, links and mentions of known people", () => {
