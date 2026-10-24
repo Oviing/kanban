@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import {
-  addComment, listActivity, overview, setHumanInLoop, answerInput, heartbeatTask, inbox, requestInput, createBoard, listBoards, listTasks, renameBoard, claimTask, confirmTask, createAgent, createApiKey, createTask, getTask, KanbanError,
+  addComment, listActivity, overview, answerInput, heartbeatTask, inbox, requestInput, createBoard, listBoards, listTasks, renameBoard, claimTask, confirmTask, createAgent, createApiKey, createTask, getTask, KanbanError,
   migrate, moveTask, pgliteDb, revokeApiKey, upsertOidcPrincipal, verifyApiKey, type Db, type Principal,
 } from "../src/index.js";
 
@@ -14,7 +14,7 @@ beforeEach(async () => {
   admin = await upsertOidcPrincipal(db, { issuer: "i", sub: "a", kind: "human", name: "Ada", email: "ada@x.io" }, ["ada@x.io"]);
   human = await upsertOidcPrincipal(db, { issuer: "i", sub: "h", kind: "human", name: "Hal" });
   agentA = await createAgent(db, admin, { name: "coder" });
-  agentB = await createAgent(db, admin, { name: "reviewer", canConfirm: true });
+  agentB = await createAgent(db, admin, { name: "reviewer" });
 });
 
 const code = async (p: Promise<unknown>) => p.then(() => "ok", (e) => (e as KanbanError).code);
@@ -140,19 +140,11 @@ describe("inbox & questions", () => {
   });
 });
 
-describe("autonomous projects (human-in-the-loop off)", () => {
-  it("only admins can switch it; default is on", async () => {
-    const b = await createBoard(db, human, "Auto");
-    expect(b.humanInLoop).toBe(true);
-    expect(await code(setHumanInLoop(db, human, b.id, false))).toBe("forbidden");
-    expect(await code(createBoard(db, human, "Auto2", false))).toBe("forbidden");
-    expect((await setHumanInLoop(db, admin, b.id, false)).humanInLoop).toBe(false);
-  });
-
+describe("agents working without humans", () => {
   it("agents confirm, work and approve each other without humans", async () => {
-    const b = await createBoard(db, admin, "Auto", false);
+    const b = await createBoard(db, admin, "Auto");
 
-    const worker = await createAgent(db, admin, { name: "plain" }); // no can_confirm
+    const worker = await createAgent(db, admin, { name: "plain" });
     const t = await createTask(db, worker, { title: "auto", boardId: b.id, confirmed: true });
     expect(t.status).toBe("confirmed"); // agent may skip proposal here
     const p = await createTask(db, worker, { title: "own", boardId: b.id });
@@ -164,7 +156,7 @@ describe("autonomous projects (human-in-the-loop off)", () => {
     await answerInput(db, agentA, t.id, "go");
     await moveTask(db, worker, t.id, "review", { summary: "ok" });
     expect(await code(moveTask(db, worker, t.id, "done"))).toBe("forbidden"); // still no self-approval
-    expect((await moveTask(db, agentA, t.id, "done")).status).toBe("done"); // another agent, no can_confirm
+    expect((await moveTask(db, agentA, t.id, "done")).status).toBe("done"); // another agent
   });
 });
 

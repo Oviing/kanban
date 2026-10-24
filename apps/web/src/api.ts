@@ -7,12 +7,12 @@ export const COLUMNS: { status: Status; title: string }[] = [
   { status: "done", title: "Done" },
 ];
 
-export interface Principal { id: string; kind: "human" | "agent"; name: string; role: "admin" | "member"; canConfirm: boolean; authMode?: "oidc" | "none"; leaseMinutes?: number }
+export interface Principal { id: string; kind: "human" | "agent"; name: string; role: "admin" | "member"; authMode?: "oidc" | "none"; leaseMinutes?: number }
 export interface Task {
   id: string; boardId: string; title: string; description: string; status: Status; priority: number;
   labels: string[]; createdBy: string; assigneeId: string | null; confirmedBy: string | null; version: number;
   needsInput: boolean; question: string | null; leaseExpiresAt: string | null;
-  reviewSummary: string | null; reviewLinks: string[]; humanInLoop: boolean;
+  reviewSummary: string | null; reviewLinks: string[];
   /** What the current user may do with this task: target status -> allowed (+ reason if not). */
   moves: Record<Status, { ok: boolean; reason?: string }>;
 }
@@ -43,7 +43,7 @@ export async function api<T = any>(path: string, init?: { method?: string; body?
 
 export type AgentState = "working" | "blocked" | "stale" | "idle";
 export interface AgentRow {
-  id: string; name: string; canConfirm: boolean; state: AgentState; lastActiveAt: string | null; activity: number[];
+  id: string; name: string; state: AgentState; lastActiveAt: string | null; activity: number[];
   tasks: { id: string; title: string; status: Status; needsInput: boolean; question: string | null; leaseExpiresAt: string | null }[];
 }
 export interface Overview {

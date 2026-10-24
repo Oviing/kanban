@@ -74,6 +74,10 @@ const MIGRATIONS: string[] = [
   `
   ALTER TABLE boards ADD COLUMN human_in_loop boolean NOT NULL DEFAULT true;
   `,
+  `
+  ALTER TABLE boards DROP COLUMN human_in_loop;
+  ALTER TABLE principals DROP COLUMN can_confirm;
+  `,
 ];
 
 export async function migrate(db: Db): Promise<void> {

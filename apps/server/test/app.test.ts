@@ -65,7 +65,7 @@ describe("auth", () => {
   it("accepts a valid OIDC JWT and auto-provisions an agent", async () => {
     const c = await mcp(await sign());
     const me = await call(c, "whoami");
-    expect(me.json).toMatchObject({ kind: "agent", name: "bot-1", canConfirm: false });
+    expect(me.json).toMatchObject({ kind: "agent", name: "bot-1" });
   });
 
   it.each([
@@ -100,7 +100,7 @@ describe("auth", () => {
 describe("agents collaborating over MCP", () => {
   it("propose -> human confirms in UI -> claim -> review -> approve", async () => {
     const worker = await createAgent(db, admin, { name: "worker" });
-    const reviewer = await createAgent(db, admin, { name: "reviewer", canConfirm: true });
+    const reviewer = await createAgent(db, admin, { name: "reviewer" });
     const w = await mcp((await createApiKey(db, admin, worker.id)).key);
     const r = await mcp((await createApiKey(db, admin, reviewer.id)).key);
 
@@ -157,7 +157,7 @@ describe("AUTH_MODE=none", () => {
       requestInit: { headers: { "X-Agent-Name": "Local Coder" } },
     }));
     const me = await call(c, "whoami");
-    expect(me.json).toMatchObject({ kind: "agent", name: "Local Coder", canConfirm: false });
+    expect(me.json).toMatchObject({ kind: "agent", name: "Local Coder" });
     const t = (await call(c, "create_task", { title: "from local agent" })).json;
     expect(t.status).toBe("proposed");
     expect((await call(c, "confirm_task", { taskId: t.id })).isError).toBeFalsy(); // agents may confirm like humans

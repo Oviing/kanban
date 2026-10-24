@@ -15,11 +15,7 @@ export interface Principal {
   kind: "human" | "agent";
   name: string;
   role: "admin" | "member";
-  canConfirm: boolean;
 }
-
-/** Humans and agents have the same rights: anyone may confirm tasks and approve work (never their own work). */
-export const mayApprove = (_p: Principal, _autonomous = false) => true;
 
 export interface TaskCtx {
   status: Status;
@@ -27,8 +23,6 @@ export interface TaskCtx {
   assigneeId: string | null;
   /** True when an agent's claim lease has run out (humans never hold leases). */
   leaseExpired: boolean;
-  /** The project runs without mandatory human confirmation/approval. */
-  autonomous: boolean;
 }
 
 type Rule = (actor: Principal, t: TaskCtx) => string | null; // null = allowed, string = reason denied
@@ -51,12 +45,8 @@ const RULES: Record<string, Rule> = {
   "in_progress->confirmed": (a, t) => (isAssignee(a, t) ? null : "only the assignee can release a task"),
   "in_progress->review": (a, t) => (isAssignee(a, t) ? null : "only the assignee can submit for review"),
   "review->done": (a, t) =>
-    !mayApprove(a, t.autonomous)
-      ? "this principal may not approve work"
-      : t.assigneeId === a.id
-        ? "the assignee cannot approve their own work"
-        : null,
-  "review->in_progress": (a, t) => (mayApprove(a, t.autonomous) ? null : "this principal may not request changes"),
+    t.assigneeId === a.id ? "the assignee cannot approve their own work" : null,
+  "review->in_progress": () => null,
 };
 
 export function checkTransition(actor: Principal, task: TaskCtx, to: Status): void {

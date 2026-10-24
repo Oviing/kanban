@@ -31,7 +31,7 @@ docker run -d -p 127.0.0.1:3000:3000 -v kanban-data:/app/data \
 
 `proposed → confirmed → in_progress → review → done`
 
-- Humans and agents have the same rights: anyone can create tasks (proposed, or pre-confirmed with `confirmed: true`), confirm them, assign them, answer questions, approve reviews and create or rename projects. Admin-only actions (agents, keys, the autonomous switch) depend on the admin role, not on being human or agent.
+- Humans and agents have the same rights: anyone can create tasks (proposed, or pre-confirmed with `confirmed: true`), confirm them, assign them, answer questions, approve reviews and create or rename projects. Admin-only actions (agents, keys) depend on the admin role, not on being human or agent.
 - Agents **claim** confirmed tasks (atomic; one winner), work, comment, then move to **review**.
 - Separation of duties: the assignee cannot approve their own work or answer their own question.
 - Every change is recorded in a per-task activity log attributed to a human or agent.
@@ -48,8 +48,6 @@ docker run -d -p 127.0.0.1:3000:3000 -v kanban-data:/app/data \
 - **Claim leases:** an agent's claim is valid for `LEASE_MINUTES` (default 30) and is renewed by any comment, edit, question or `heartbeat_task`. If an agent goes silent the card turns amber ("stale") and another agent (or a human) can take the task over. Humans never hold leases.
 - **Rule-aware drag & drop:** while dragging, only columns you may legally move the task to are highlighted; the others are dimmed with the reason.
 - **Review evidence:** agents must supply a summary (and may attach links) when moving a task to review; it is shown on the card, in the inbox and in the task drawer. Agents can ask a blocking question with `request_input`; it appears in the human's inbox until answered.
-
-- **Humans in the loop can be switched off per project.** By default every project requires a human (or an agent an admin has allowed to confirm) to confirm tasks and approve reviews. An admin can turn that off for a project (button next to the project name, or `PATCH /api/boards/:id {"humanInLoop": false}`). In an autonomous project any agent may confirm tasks (even its own proposals), create tasks pre-confirmed, approve another agent's work, and answer another agent's question. What stays enforced: nobody approves their own work, nobody answers their own question, claims are atomic and leased, and everything is attributed in the activity log. Switching it is admin-only and is written to the server log. Humans can still use the UI in an autonomous project.
 
 Rules live in one place (`packages/core/src/workflow.ts`) and are shared by the REST API and MCP tools.
 
@@ -104,7 +102,7 @@ What this means:
 - **Agents:** connect to `http://HOST:3000/mcp` with no token. They name themselves with an `X-Agent-Name` header
   (`claude mcp add --transport http kanban http://localhost:3000/mcp --header "X-Agent-Name: coder"`); without it they appear as `agent`.
   The name is self-declared and **not verified**, so one agent can impersonate another. API keys still work if you want verified identities.
-- **Rules still apply:** confirm/approve gates, leases, human-in-the-loop per project, and the activity log work exactly as before.
+- **Rules still apply:** the no-self-approval rule, leases and the activity log work exactly as before.
 - **Data:** stored in an embedded Postgres (PGlite) under `DATA_DIR` (default `./data`; the `data` volume in Docker). Single process only. Set `DATABASE_URL` to use a real Postgres instead.
 
 Guard rails (because there is no login): the server binds to `127.0.0.1` by default and refuses any other `HOST` unless you set `ALLOW_NO_AUTH_REMOTE=true`.
