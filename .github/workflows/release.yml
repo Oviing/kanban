@@ -40,7 +40,9 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run build:cli
-      - run: npm publish -w agent-kanban --provenance --access public
+      - name: tag must match package version
+        run: test "v$(node -p "require('./packages/cli/package.json').version")" = "$GITHUB_REF_NAME"
+      - run: npm publish -w @joelkischkel/agent-kanban --access public
         env: { NODE_AUTH_TOKEN: "${{ secrets.NPM_TOKEN }}" }
   release:
     needs: [image, npm]

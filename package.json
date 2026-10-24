@@ -9,7 +9,7 @@
     "build": "npm run build -w @kanban/core && npm run build -w @kanban/web && npm run build -w @kanban/server",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",
-    "build:cli": "npm run build -w agent-kanban"
+    "build:cli": "npm run build -w @joelkischkel/agent-kanban"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
