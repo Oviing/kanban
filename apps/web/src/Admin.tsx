@@ -2,18 +2,23 @@ import { useCallback, useEffect, useState } from "react";
 import { api, type Principal } from "./api";
 
 interface Person extends Principal { email?: string | null; createdAt?: string }
+interface Invite { id: string; email: string; role: "admin" | "member"; expiresAt: string }
 interface Key { id: string; principalId: string; label: string; prefix: string; createdAt: string; revokedAt: string | null; lastUsedAt: string | null }
 
 export function Admin({ me }: { me: Principal }) {
   const [people, setPeople] = useState<Person[]>([]);
   const [keys, setKeys] = useState<Key[]>([]);
+  const [invites, setInvites] = useState<Invite[]>([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"member" | "admin">("member");
+  const [link, setLink] = useState<string>();
   const [name, setName] = useState("");
   const [fresh, setFresh] = useState<string>();
   const [error, setError] = useState<string>();
 
   const load = useCallback(async () => {
-    const [p, k] = await Promise.all([api<Person[]>("/principals"), api<Key[]>("/api-keys")]);
-    setPeople(p); setKeys(k);
+    const [p, k, i] = await Promise.all([api<Person[]>("/principals"), api<Key[]>("/api-keys"), api<Invite[]>("/invites")]);
+    setPeople(p); setKeys(k); setInvites(i);
   }, []);
   useEffect(() => { load().catch((e) => setError(e.message)); }, [load]);
 
@@ -27,9 +32,9 @@ export function Admin({ me }: { me: Principal }) {
   return (
     <main className="admin">
       {error && <div className="error" role="alert" onClick={() => setError(undefined)}>{error}</div>}
-      <h3>People</h3>
+      <h3>People{me.orgs?.length ? <small className="hint"> · {me.orgs.find((o) => o.id === me.orgId)?.name}</small> : null}</h3>
       <table>
-        <thead><tr><th>Name</th><th>Email</th><th>Joined</th><th>Role</th></tr></thead>
+        <thead><tr><th>Name</th><th>Email</th><th>Joined</th><th>Role</th><th /></tr></thead>
         <tbody>
           {people.filter((p) => p.kind === "human").map((p) => (
             <tr key={p.id}>
@@ -41,11 +46,32 @@ export function Admin({ me }: { me: Principal }) {
                   <option value="member">Member</option><option value="admin">Admin</option>
                 </select>
               </td>
+              <td>{p.id !== me.id && <button onClick={async () => { if (confirm(`Remove ${p.name} from this organization?`)) run(() => api(`/principals/${p.id}`, { method: "DELETE" })); }}>Remove</button>}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      <p className="hint">People appear here after their first sign-in. Admins manage agents, keys and roles; at least one admin must remain.</p>
+      {me.authMode !== "none" && (
+        <>
+          <form onSubmit={(e) => { e.preventDefault(); run(async () => { const r = await api("/invites", { method: "POST", body: { email: inviteEmail.trim(), role: inviteRole } }); setLink(`${location.origin}/#/invite/${r.token}`); setInviteEmail(""); }); }}>
+            <input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="Email (optional, limits who can accept)" aria-label="Invitee email" />{" "}
+            <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as "member" | "admin")} aria-label="Invite role"><option value="member">Member</option><option value="admin">Admin</option></select>{" "}
+            <button className="primary">Create invite link</button>
+          </form>
+          {link && <div className="fresh">Send this link to the person. It works once and expires in 7 days:<code>{link}</code></div>}
+          {invites.length > 0 && (
+            <table>
+              <tbody>
+                {invites.map((i) => (
+                  <tr key={i.id}><td>{i.email || "Anyone with the link"}</td><td>{i.role}</td><td>expires {new Date(i.expiresAt).toLocaleDateString()}</td>
+                    <td><button onClick={() => run(() => api(`/invites/${i.id}`, { method: "DELETE" }))}>Revoke</button></td></tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </>
+      )}
+      <p className="hint">People appear here after they sign in or accept an invite. Admins manage agents, keys and roles; at least one admin must remain.</p>
       <h3>Agents</h3>
       <form onSubmit={(e) => { e.preventDefault(); if (name.trim()) run(async () => { await api("/agents", { method: "POST", body: { name } }); setName(""); }); }}>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="New agent name" /> <button className="primary">Create agent</button>

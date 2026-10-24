@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, api, type Principal } from "./api";
+import { ApiError, api, setActiveOrg, type Org, type Principal } from "./api";
+import { askText } from "./dialog";
 import { Board } from "./Board";
 import { Agents } from "./Agents";
 import { Admin } from "./Admin";
@@ -21,6 +22,7 @@ export function App() {
   const [palette, setPalette] = useState(false);
   const [help, setHelp] = useState(false);
   const [live, setLive] = useState<boolean | null>(null);
+  const [provider, setProvider] = useState<string>();
   const [theme, setTheme] = useTheme();
   const chord = useRef(0);
   const route = useRoute((localStorage.getItem("kb_page") as Page) || "board");
@@ -29,8 +31,28 @@ export function App() {
   const go = useCallback((p: Page) => navigate(p === "board" ? { page: p, boardId: localStorage.getItem("kb_board") ?? undefined } : { page: p }), []);
 
   useEffect(() => {
-    api<Principal>("/me").then(setMe, (e) => (e instanceof ApiError && e.status === 401 ? setMe(null) : Promise.reject(e)));
+    // A remembered organization the person has since left answers 403: forget it and use their default.
+    const load = () => api<Principal>("/me").catch((e) => (e instanceof ApiError && e.status === 403 ? (setActiveOrg(null), api<Principal>("/me")) : Promise.reject(e)));
+    const invite = /^#\/invite\/(.+)$/.exec(location.hash)?.[1] ?? sessionStorage.getItem("kb_invite");
+    load().then(async (m) => {
+      if (invite) {
+        // Invite links survive the sign-in redirect through sessionStorage.
+        sessionStorage.removeItem("kb_invite");
+        try { setActiveOrg((await api<Org>("/invites/accept", { method: "POST", body: { token: decodeURIComponent(invite) } })).id); } catch (e) { alert((e as Error).message); }
+        location.hash = "#/board"; location.reload();
+        return;
+      }
+      if (m.orgId) setActiveOrg(m.orgId);
+      setMe(m);
+    }, (e) => {
+      if (!(e instanceof ApiError && e.status === 401)) return Promise.reject(e);
+      if (invite) sessionStorage.setItem("kb_invite", invite);
+      setMe(null);
+    });
   }, []);
+  useEffect(() => {
+    if (me === null) fetch("/auth/info").then((r) => r.json()).then((i) => setProvider(i.provider), () => {});
+  }, [me]);
   useEffect(() => {
     if (!me) return;
     return onLive(setLive);
@@ -46,6 +68,14 @@ export function App() {
     setTimeout(() => window.dispatchEvent(new Event("kb:new-task")), page === "board" ? 0 : 60);
   }, [go, page]);
   const jumpTo = useCallback((boardId: string, taskId?: string) => navigate({ page: "board", boardId, taskId }, { task: !!taskId }), []);
+  const switchOrg = useCallback(async (value: string) => {
+    if (value === "__new") {
+      const name = (await askText({ title: "New organization", label: "Organization name", confirm: "Create" }))?.trim();
+      if (!name) return;
+      value = (await api<Org>("/orgs", { method: "POST", body: { name } })).id;
+    }
+    setActiveOrg(value); localStorage.removeItem("kb_board"); location.hash = "#/board"; location.reload();
+  }, []);
   const cycleTheme = useCallback(() => setTheme(NEXT_THEME[theme]), [theme, setTheme]);
 
   useEffect(() => {
@@ -74,7 +104,7 @@ export function App() {
       <div className="center login">
         <h1>Agent Kanban</h1>
         <p>Humans and AI agents working the same board.</p>
-        <a className="btn primary" href="/auth/login">Sign in with OpenID Connect</a>
+        <a className="btn primary" href="/auth/login">{provider === "google" ? <><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.4 30.4 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.5 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7l-7.9-6.1A24 24 0 0 0 0 24c0 3.9.9 7.5 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.8 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg> Sign in with Google</> : "Sign in"}</a>
       </div>
     );
 
@@ -98,6 +128,12 @@ export function App() {
         </nav>
         <div className="right">
           {live !== null && <span className="livepill" title={live ? "Connected, updates arrive instantly" : "Connection lost, retrying"}><i className={live ? "pulse" : "off"} />{live ? "Live" : "Reconnecting…"}</span>}
+          {(me.multiTenant || (me.orgs?.length ?? 0) > 1) && me.kind === "human" && (
+            <select className="orgsel" value={me.orgId} onChange={(e) => switchOrg(e.target.value)} aria-label="Organization">
+              {me.orgs?.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+              {me.multiTenant && <option value="__new">+ New organization…</option>}
+            </select>
+          )}
           <button className="search" onClick={() => setPalette(true)} aria-label="Open command palette (⌘K)">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><circle cx="6" cy="6" r="4.2" /><path d="M9.2 9.2L12 12" /></svg>
             <span>Search or jump to…</span><Kbd>⌘K</Kbd>

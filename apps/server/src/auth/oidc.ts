@@ -1,7 +1,7 @@
 import * as client from "openid-client";
 import { getSignedCookie, setSignedCookie, deleteCookie } from "hono/cookie";
 import { Hono } from "hono";
-import { promoteFirstHuman, upsertOidcPrincipal, type Db } from "@kanban/core";
+import { createOrg, listOrgs, promoteFirstHuman, upsertOidcPrincipal, type Db } from "@kanban/core";
 import type { Config } from "../config.js";
 
 const required = <T,>(v: T | null): T => { if (!v) throw new Error("OIDC is not configured"); return v; };
@@ -29,6 +29,10 @@ export function oidcRoutes(db: Db, config: Config) {
       }));
   const redirectUri = `${cfg.publicUrl}/auth/callback`;
   const secure = cfg.publicUrl.startsWith("https:");
+
+  // Lets the login page name the provider ("Sign in with Google") without knowing the issuer.
+  const provider = /(^|\.)google\.com$/.test(new URL(cfg.oidc.issuer).hostname) ? "google" : "oidc";
+  app.get("/auth/info", (c) => c.json({ provider }));
 
   app.get("/auth/login", async (c) => {
     const config = await conf();
@@ -77,13 +81,19 @@ export function oidcRoutes(db: Db, config: Config) {
     }
     // Only trust the email for admin bootstrap if the IdP says it is verified.
     const trusted = claims.email_verified === true ? email : null;
-    let p = await upsertOidcPrincipal(
-      db,
-      { issuer: cfg.oidc.issuer, sub: claims.sub, kind: "human", name, email },
-      trusted ? cfg.adminEmails.filter((a) => a.toLowerCase() === trusted.toLowerCase()) : [],
-    );
-    p = await promoteFirstHuman(db, p);
-    await setSession(c, cfg, p.id);
+    // With open sign-up an unverified email must not count: invites are pinned to emails.
+    const ident = { issuer: cfg.oidc.issuer, sub: claims.sub, kind: "human" as const, name, email: cfg.multiTenant ? trusted : email };
+    const admins = trusted ? cfg.adminEmails.filter((a) => a.toLowerCase() === trusted.toLowerCase()) : [];
+    let pid: string;
+    if (cfg.multiTenant) {
+      // Everyone gets a workspace of their own on first sign-in; further ones come via invites or "new organization".
+      const u = await upsertOidcPrincipal(db, ident, admins, null);
+      if (!(await listOrgs(db, u.id)).length) await createOrg(db, u.id, `${name}'s workspace`);
+      pid = u.id;
+    } else {
+      pid = (await promoteFirstHuman(db, await upsertOidcPrincipal(db, ident, admins))).id;
+    }
+    await setSession(c, cfg, pid);
     return c.redirect("/");
   });
 

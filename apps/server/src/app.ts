@@ -56,8 +56,11 @@ export function createApp({ db, cfg, authenticateBearer, webRoot }: AppDeps) {
       c.set("via", "bearer");
     } else {
       const pid = await readSession(c, cfg);
-      p = pid ? await getPrincipal(db, pid) : null;
-      if (!p) return unauthorized(c);
+      // The UI says which of the person's organizations it is working in; default is their oldest.
+      const org = c.req.header("x-org") || c.req.query("org") || undefined; // EventSource can only use the query string
+      if (org && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(org)) return c.json({ error: "invalid", message: "malformed organization id" }, 400);
+      p = pid ? await getPrincipal(db, pid, org) : null;
+      if (!p) return pid ? c.json({ error: "forbidden", message: org ? "not a member of that organization" : "no organization" }, 403) : unauthorized(c);
       c.set("via", "session");
       // Cookie-authenticated writes must come from our own origin (CSRF defence in depth on top of SameSite=Lax).
       if (!["GET", "HEAD", "OPTIONS"].includes(c.req.method) && c.req.header("origin") !== origin)
@@ -118,7 +121,7 @@ export function createApp({ db, cfg, authenticateBearer, webRoot }: AppDeps) {
   } else app.get("/auth/login", (c) => c.redirect("/"));
 
   for (const mw of authMw) app.use("/api/*", mw);
-  app.route("/api", apiRoutes(db, { authMode: cfg.authMode, leaseMinutes: cfg.leaseMinutes }));
+  app.route("/api", apiRoutes(db, { authMode: cfg.authMode, leaseMinutes: cfg.leaseMinutes, multiTenant: cfg.multiTenant }));
 
   app.use("/mcp", rateLimit(600, 60_000, (c) => c.req.header("authorization")?.slice(-16) ?? ip(c)));
   for (const mw of authMw) app.use("/mcp", mw);

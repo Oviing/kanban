@@ -33,17 +33,17 @@ export function buildMcpServer(db: Db, me: Principal): McpServer {
     server.registerTool(name, { description, inputSchema: shape }, (a: any) => run(() => fn(a)));
 
   tool("whoami", "Return the identity you are acting as.", {}, async () => me);
-  tool("list_boards", "List projects (boards). Pass a project id as boardId to create_task / list_tasks to work within it.", {}, () => listBoards(db));
+  tool("list_boards", "List projects (boards). Pass a project id as boardId to create_task / list_tasks to work within it.", {}, () => listBoards(db, me));
   tool("create_board", "Create a project (board).", { name: z.string().min(1) }, ({ name }) => createBoard(db, me, name));
   tool("rename_board", "Rename a project.", { boardId: id, name: z.string().min(1) }, ({ boardId, name }) => renameBoard(db, me, boardId, name));
-  tool("list_principals", "List humans and agents (ids are needed for assign_task).", {}, () => listPrincipals(db));
+  tool("list_principals", "List humans and agents (ids are needed for assign_task).", {}, () => listPrincipals(db, me));
   tool(
     "list_tasks",
     "List tasks, optionally filtered. Most important first.",
     { boardId: id.optional(), status: status.optional(), assigneeId: id.optional(), label: z.string().optional(), mine: z.boolean().optional() },
-    ({ mine, ...f }) => listTasks(db, { ...f, assigneeId: mine ? me.id : f.assigneeId }),
+    ({ mine, ...f }) => listTasks(db, me, { ...f, assigneeId: mine ? me.id : f.assigneeId }),
   );
-  tool("get_task", "Get a task with its comments and activity log.", { taskId: id }, ({ taskId }) => getTask(db, taskId));
+  tool("get_task", "Get a task with its comments and activity log.", { taskId: id }, ({ taskId }) => getTask(db, me, taskId));
   tool(
     "create_task",
     "Create a task. It starts as 'proposed' until confirmed; pass confirmed: true to create it already confirmed.",

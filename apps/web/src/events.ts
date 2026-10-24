@@ -1,4 +1,5 @@
 /** One EventSource per tab (browsers allow ~6 HTTP/1.1 connections per origin), shared by every view. */
+import { activeOrg } from "./api";
 type Cb = () => void;
 const subs = new Set<Cb>();
 const status = new Set<(live: boolean) => void>();
@@ -7,7 +8,7 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 
 function ensure() {
   if (es) return;
-  es = new EventSource("/api/events");
+  es = new EventSource(activeOrg() ? `/api/events?org=${activeOrg()}` : "/api/events");
   es.onopen = () => status.forEach((f) => f(true));
   es.onerror = () => status.forEach((f) => f(false));
   // A burst of agent activity collapses into one refetch.

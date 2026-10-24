@@ -1,5 +1,5 @@
 import { jwtVerify, createRemoteJWKSet, type JWTVerifyGetKey, type JWTPayload } from "jose";
-import { upsertOidcPrincipal, verifyApiKey, type Db, type Principal } from "@kanban/core";
+import { findOrg, upsertOidcPrincipal, verifyApiKey, type Db, type Principal } from "@kanban/core";
 
 export interface BearerOptions {
   issuer: string;
@@ -7,6 +7,9 @@ export interface BearerOptions {
   /** Key resolver; defaults to the issuer's JWKS. Injectable for tests. */
   getKey?: JWTVerifyGetKey;
   jwksUri?: () => Promise<string>;
+  /** Multi-tenant: tokens must carry `orgClaim` (org id or slug); without it the agent has no tenant and is refused. */
+  multiTenant?: boolean;
+  orgClaim?: string;
 }
 
 async function discoverJwksUri(issuer: string): Promise<string> {
@@ -41,6 +44,13 @@ export function makeBearerAuth(db: Db, opts: BearerOptions) {
     if (!payload.sub) return null;
     const p = payload as Record<string, unknown>;
     const name = String(p.preferred_username ?? p.client_id ?? p.azp ?? p.name ?? payload.sub);
-    return upsertOidcPrincipal(db, { issuer: opts.issuer, sub: payload.sub, kind: "agent", name });
+    let orgId: string | undefined;
+    if (opts.multiTenant) {
+      const claim = p[opts.orgClaim ?? "kanban_org"];
+      orgId = typeof claim === "string" ? (await findOrg(db, claim))?.id : undefined;
+      if (!orgId) return null;
+    }
+    const agent = await upsertOidcPrincipal(db, { issuer: opts.issuer, sub: payload.sub, kind: "agent", name }, [], orgId);
+    return !orgId || agent.orgId === orgId ? agent : null; // an agent belongs to one org for good
   };
 }

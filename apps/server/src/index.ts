@@ -3,7 +3,7 @@ import pg from "pg";
 import { existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { relative } from "node:path";
-import { ensureDefaultBoard, migrate, pgDb, pgliteDb, setLeaseMinutes, verifyApiKey, type Db } from "@kanban/core";
+import { defaultOrg, ensureDefaultBoard, migrate, pgDb, pgliteDb, setLeaseMinutes, verifyApiKey, type Db } from "@kanban/core";
 import { loadConfig } from "./config.js";
 import { createApp } from "./app.js";
 import { makeBearerAuth } from "./auth/bearer.js";
@@ -22,10 +22,10 @@ if (cfg.databaseUrl) {
   console.log(`Using embedded database in ${cfg.dataDir}/pglite`);
 }
 await migrate(db);
-await ensureDefaultBoard(db);
+await ensureDefaultBoard(db, (await defaultOrg(db)).id);
 
 const authenticateBearer = cfg.oidc
-  ? makeBearerAuth(db, { issuer: cfg.oidc.issuer, audience: cfg.oidc.audience })
+  ? makeBearerAuth(db, { issuer: cfg.oidc.issuer, audience: cfg.oidc.audience, multiTenant: cfg.multiTenant })
   : (token: string) => verifyApiKey(db, token); // no IdP: API keys only
 
 // WEB_DIST lets a bundled/packaged install (npx, image) place the UI anywhere; default is the repo layout.

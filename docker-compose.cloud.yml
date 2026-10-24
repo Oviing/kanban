@@ -32,6 +32,7 @@ services:
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
       OIDC_AUDIENCE: ${OIDC_AUDIENCE:-}
       OIDC_ADMIN_EMAILS: ${OIDC_ADMIN_EMAILS:-}
+      MULTI_TENANT: ${MULTI_TENANT:-false}
   caddy:
     image: caddy:2
     restart: unless-stopped

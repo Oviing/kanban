@@ -22,6 +22,8 @@ export interface Config {
   /** Hostnames (host[:port]) this server answers to in no-auth mode; guards against DNS rebinding. */
   allowedHosts: string[];
   adminEmails: string[];
+  /** Many independent organizations on one deployment: sign-ups get their own workspace, agent tokens must name an org. */
+  multiTenant: boolean;
   leaseMinutes: number;
 }
 
@@ -68,6 +70,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
         },
     allowedHosts: [new URL(publicUrl).host.toLowerCase(), `localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`, ...extraHosts],
     leaseMinutes: Number(env.LEASE_MINUTES ?? 30),
+    multiTenant: !noAuth && env.MULTI_TENANT === "true",
     adminEmails: (env.OIDC_ADMIN_EMAILS ?? "").split(",").map((s) => s.trim()).filter(Boolean),
   };
 }

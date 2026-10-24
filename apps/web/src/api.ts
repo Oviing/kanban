@@ -7,7 +7,14 @@ export const COLUMNS: { status: Status; title: string }[] = [
   { status: "done", title: "Done" },
 ];
 
-export interface Principal { id: string; kind: "human" | "agent"; name: string; role: "admin" | "member"; authMode?: "oidc" | "none"; leaseMinutes?: number }
+export interface Org { id: string; name: string; slug: string; role?: "admin" | "member" }
+export interface Principal {
+  id: string; kind: "human" | "agent"; name: string; role: "admin" | "member"; orgId?: string;
+  authMode?: "oidc" | "none"; leaseMinutes?: number; multiTenant?: boolean; orgs?: Org[];
+}
+/** Which of the person's organizations this tab works in; sent with every request. */
+export const activeOrg = () => { try { return localStorage.getItem("kb_org") ?? undefined; } catch { return undefined; } };
+export const setActiveOrg = (id: string | null) => { try { id ? localStorage.setItem("kb_org", id) : localStorage.removeItem("kb_org"); } catch {} };
 export interface Task {
   id: string; boardId: string; title: string; description: string; status: Status; priority: number;
   labels: string[]; createdBy: string; assigneeId: string | null; confirmedBy: string | null; version: number;
@@ -32,7 +39,7 @@ export class ApiError extends Error {
 export async function api<T = any>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method: init?.method ?? "GET",
-    headers: init?.body !== undefined ? { "content-type": "application/json" } : undefined,
+    headers: { ...(init?.body !== undefined ? { "content-type": "application/json" } : {}), ...(activeOrg() ? { "x-org": activeOrg()! } : {}) },
     body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
   });
   if (res.status === 204) return undefined as T;

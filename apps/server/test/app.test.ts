@@ -4,7 +4,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair } from "jose";
 import { serializeSigned } from "hono/utils/cookie";
-import { createAgent, createApiKey, verifyApiKey, migrate, pgliteDb, upsertOidcPrincipal, type Db, type Principal } from "@kanban/core";
+import { createAgent, createApiKey, createBoard, createOrg, createTask, getPrincipal, verifyApiKey, migrate, pgliteDb, upsertOidcPrincipal, type Db, type Principal } from "@kanban/core";
 import { createApp } from "../src/app.js";
 import { makeBearerAuth } from "../src/auth/bearer.js";
 import type { Config } from "../src/config.js";
@@ -13,7 +13,7 @@ const ISS = "https://idp.test/realms/x";
 const cfg: Config = {
   authMode: "oidc", host: "0.0.0.0", dataDir: "", allowedHosts: ["kanban.test"],
   port: 0, databaseUrl: "", publicUrl: "https://kanban.test", sessionSecret: "s".repeat(40),
-  oidc: { issuer: ISS, clientId: "web", audience: "kanban", scope: "openid", allowInsecure: false }, adminEmails: [], leaseMinutes: 30,
+  oidc: { issuer: ISS, clientId: "web", audience: "kanban", scope: "openid", allowInsecure: false }, adminEmails: [], leaseMinutes: 30, multiTenant: false,
 };
 
 let db: Db, app: ReturnType<typeof createApp>, admin: Principal, human: Principal;
@@ -181,5 +181,67 @@ describe("AUTH_MODE=none", () => {
 
   it("has no OIDC endpoints", async () => {
     expect((await json("/.well-known/oauth-protected-resource")).status).toBe(404);
+  });
+});
+
+describe("multi-tenancy", () => {
+  let jwk: any, signKey: CryptoKey, orgA: { id: string; slug: string }, orgB: { id: string; slug: string }, ownerA: Principal, ownerB: Principal;
+  beforeAll(async () => {
+    const kp = await generateKeyPair("RS256");
+    jwk = { ...(await exportJWK(kp.publicKey)), alg: "RS256", kid: "k1" };
+    signKey = kp.privateKey;
+    const a = await upsertOidcPrincipal(db, { issuer: ISS, sub: "ann", kind: "human", name: "Ann" }, [], null);
+    const b = await upsertOidcPrincipal(db, { issuer: ISS, sub: "ben", kind: "human", name: "Ben" }, [], null);
+    orgA = await createOrg(db, a.id, "Acme"); orgB = await createOrg(db, b.id, "Bolt");
+    ownerA = (await getPrincipal(db, a.id, orgA.id))!; ownerB = (await getPrincipal(db, b.id, orgB.id))!;
+  });
+  const req = async (p: Principal, path: string, org?: string) =>
+    app.request(`https://kanban.test/api${path}`, { headers: { cookie: await sessionCookie(p), ...(org ? { "x-org": org } : {}) } });
+
+  it("one /mcp URL, the API key decides the tenant", async () => {
+    const [ka, kb] = await Promise.all([
+      createApiKey(db, ownerA, (await createAgent(db, ownerA, { name: "bot" })).id),
+      createApiKey(db, ownerB, (await createAgent(db, ownerB, { name: "bot" })).id),
+    ]);
+    const [a, b] = [await mcp(ka.key), await mcp(kb.key)];
+    expect((await call(a, "whoami")).json.orgId).toBe(orgA.id);
+    const secret = (await call(b, "create_task", { title: "bolt secret" })).json;
+    expect((await call(a, "list_tasks")).json).toEqual([]);
+    expect((await call(a, "get_task", { taskId: secret.id })).isError).toBe(true);
+    expect((await call(a, "list_principals")).json.map((p: any) => p.name)).toEqual(["Ann", "bot"]);
+    expect((await call(b, "list_boards")).json).toHaveLength(1);
+  });
+
+  it("people choose the active org with X-Org and can't pick one they don't belong to", async () => {
+    await createBoard(db, ownerA, "Acme roadmap");
+    expect((await (await req(ownerA, "/boards", orgA.id)).json()).map((b: any) => b.name)).toContain("Acme roadmap");
+    expect((await req(ownerA, "/boards", orgB.id)).status).toBe(403);
+    expect((await req(ownerA, "/boards", "not-a-uuid")).status).toBe(400);
+    const me = await (await req(ownerA, "/me")).json();
+    expect(me).toMatchObject({ orgId: orgA.id, orgs: [{ slug: orgA.slug, role: "admin" }] });
+  });
+
+  it("the live event stream only carries the caller's org", async () => {
+    const res = await req(ownerA, "/events");
+    const reader = res.body!.getReader(), dec = new TextDecoder();
+    const theirs = await createTask(db, ownerB, { title: "b-only" });
+    const mine = await createTask(db, ownerA, { title: "a-only" });
+    let text = "";
+    const t0 = Date.now();
+    while (!text.includes(mine.id) && Date.now() - t0 < 3000) text += dec.decode((await reader.read()).value);
+    await reader.cancel();
+    expect(text).toContain(mine.id);
+    expect(text).not.toContain(theirs.id);
+  });
+
+  it("OIDC agent tokens must name an org when multi-tenant", async () => {
+    const auth = makeBearerAuth(db, { issuer: ISS, audience: "kanban", getKey: createLocalJWKSet({ keys: [jwk] }), multiTenant: true });
+    const token = (claims: object) => new SignJWT({ client_id: "svc", ...claims }).setProtectedHeader({ alg: "RS256", kid: "k1" })
+      .setSubject("svc-mt").setIssuer(ISS).setAudience("kanban").setIssuedAt().setExpirationTime("5m").sign(signKey);
+    expect(await auth(await token({ kanban_org: orgA.id }))).not.toBeNull(); // the token itself is valid…
+    expect(await auth(await token({}))).toBeNull(); // …but without an org it has no tenant
+    expect(await auth(await token({ kanban_org: "no-such-org" }))).toBeNull();
+    expect((await auth(await token({ kanban_org: orgA.slug })))?.orgId).toBe(orgA.id);
+    expect(await auth(await token({ kanban_org: orgB.id }))).toBeNull(); // bound to Acme for good
   });
 });

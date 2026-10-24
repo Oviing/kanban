@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import {
-  addComment, listActivity, overview, answerInput, assignTask, heartbeatTask, inbox, requestInput, createBoard, listBoards, listTasks, renameBoard, claimTask, confirmTask, createAgent, createApiKey, updatePrincipal, createTask, getTask, KanbanError,
+  addComment, listActivity, overview, answerInput, assignTask, heartbeatTask, inbox, requestInput, createBoard, listBoards, listTasks, renameBoard, claimTask, confirmTask, createAgent, createApiKey, updatePrincipal, createOrg, getPrincipal, listOrgs, listPrincipals, listApiKeys, createInvite, acceptInvite, listInvites, removeMember, createTask, getTask, updateTask, KanbanError,
   migrate, moveTask, pgliteDb, revokeApiKey, upsertOidcPrincipal, verifyApiKey, type Db, type Principal,
 } from "../src/index.js";
 
@@ -42,7 +42,7 @@ describe("workflow", () => {
     expect(await code(moveTask(db, agentA, t.id, "done"))).toBe("forbidden");
     expect((await moveTask(db, agentB, t.id, "done")).status).toBe("done");
     expect(await code(moveTask(db, human, t.id, "proposed"))).toBe("invalid");
-    const full = await getTask(db, t.id);
+    const full = await getTask(db, admin, t.id);
     expect(full).toMatchObject({ reviewSummary: "implemented", reviewLinks: ["https://x/pr/1"] });
     expect(full.events.map((e: any) => e.type)).toEqual(["created", "claimed", "moved", "moved"]);
   });
@@ -56,7 +56,7 @@ describe("workflow", () => {
   it("comments are attributed", async () => {
     const t = await createTask(db, agentA, { title: "t" });
     await addComment(db, agentA, t.id, "hello");
-    const full = await getTask(db, t.id);
+    const full = await getTask(db, admin, t.id);
     expect(full.comments[0]).toMatchObject({ body: "hello", authorKind: "agent" });
   });
 });
@@ -82,10 +82,10 @@ describe("projects", () => {
     const b = await createBoard(db, human, "Beta");
     await createTask(db, agentA, { title: "in a", boardId: a.id });
     await createTask(db, agentA, { title: "in b", boardId: b.id });
-    expect((await listTasks(db, { boardId: a.id })).map((t) => t.title)).toEqual(["in a"]);
+    expect((await listTasks(db, admin, { boardId: a.id })).map((t) => t.title)).toEqual(["in a"]);
     expect((await createBoard(db, agentA, "By agent")).name).toBe("By agent");
     expect((await renameBoard(db, human, a.id, "Alpha 2")).name).toBe("Alpha 2");
-    expect((await listBoards(db)).map((x) => x.name)).toEqual(expect.arrayContaining(["Alpha 2", "Beta"]));
+    expect((await listBoards(db, admin)).map((x) => x.name)).toEqual(expect.arrayContaining(["Alpha 2", "Beta"]));
     expect(await code(createTask(db, agentA, { title: "x", boardId: "00000000-0000-0000-0000-000000000000" }))).toBe("not_found");
   });
 });
@@ -114,7 +114,7 @@ describe("leases", () => {
     const taken = await claimTask(db, agentB, t.id);
     expect(taken.assigneeId).toBe(agentB.id);
     expect(taken.leaseExpiresAt).not.toBeNull();
-    expect((await getTask(db, t.id)).events.map((e: any) => e.type)).toContain("taken_over");
+    expect((await getTask(db, admin, t.id)).events.map((e: any) => e.type)).toContain("taken_over");
   });
 });
 
@@ -135,7 +135,7 @@ describe("inbox & questions", () => {
     expect(await code(answerInput(db, agentA, t.id, "x"))).toBe("forbidden"); // not its own question
     await answerInput(db, human, t.id, "postgres");
     expect((await inbox(db, human)).map((i) => i.kind)).not.toContain("input");
-    expect((await getTask(db, t.id)).comments.map((c: any) => c.body)).toEqual(["Question: which db?", "Answer: postgres"]);
+    expect((await getTask(db, admin, t.id)).comments.map((c: any) => c.body)).toEqual(["Question: which db?", "Answer: postgres"]);
     expect(await code(answerInput(db, human, t.id, "again"))).toBe("invalid");
   });
 });
@@ -155,7 +155,7 @@ describe("questions and reassignment", () => {
     await claimTask(db, agentA, t.id);
     const asked = await requestInput(db, agentA, t.id, "mock or retry?", [" mock ", "retry", "retry", ""]);
     expect(asked.questionOptions).toEqual(["mock", "retry"]);
-    expect((await listActivity(db, {})).find((e) => e.type === "input_requested")?.payload).toMatchObject({ options: ["mock", "retry"] });
+    expect((await listActivity(db, admin, {})).find((e) => e.type === "input_requested")?.payload).toMatchObject({ options: ["mock", "retry"] });
     expect(await code(requestInput(db, agentA, t.id, "q", Array.from({ length: 7 }, (_, i) => `o${i}`)))).toBe("invalid");
     expect(await code(requestInput(db, agentA, t.id, "q", ["x".repeat(81)]))).toBe("invalid");
     expect((await requestInput(db, agentA, t.id, "plain?")).questionOptions).toEqual([]);
@@ -201,13 +201,13 @@ describe("supervision views", () => {
     await db.query(`UPDATE tasks SET lease_expires_at = now() - interval '2 minutes' WHERE id=$1`, [old.id]);
     await claimTask(db, agentB, done.id); await moveTask(db, agentB, done.id, "review", { summary: "s" }); await moveTask(db, human, done.id, "done");
 
-    const o = await overview(db);
+    const o = await overview(db, admin);
     const st = Object.fromEntries(o.agents.map((a) => [a.name, a.state]));
     expect(st).toMatchObject({ coder: "working", w2: "blocked", w3: "stale", reviewer: "idle" });
     expect(o.kpis).toMatchObject({ agentsActive: 2, agentsTotal: 4, staleLeases: 1, doneToday: 1, waitingOnHuman: 1 });
     expect(o.pipeline).toMatchObject({ in_progress: 3, done: 1 });
     expect(o.agents.find((a) => a.name === "coder")!.activity.reduce((a, b) => a + b, 0)).toBeGreaterThan(0);
-    const feed = await listActivity(db, { limit: 5 });
+    const feed = await listActivity(db, admin, { limit: 5 });
     expect(feed).toHaveLength(5);
     expect(feed[0].id).toBeGreaterThan(feed[1].id);
     expect(feed[0]).toMatchObject({ actorName: "Hal", type: "moved" });
@@ -221,5 +221,98 @@ describe("user management", () => {
     expect(await code(updatePrincipal(db, admin, agentA.id, { role: "admin" }))).toBe("invalid");
     expect(await code(updatePrincipal(db, admin, admin.id, { role: "member" }))).toBe("invalid");
     expect(await code(updatePrincipal(db, human, human.id, { role: "admin" }))).toBe("forbidden");
+  });
+});
+
+describe("tenant isolation", () => {
+  let owner: Principal, bAgent: Principal, bBoard: { id: string }, bTask: { id: string }, orgB: { id: string };
+  beforeEach(async () => {
+    const u = await upsertOidcPrincipal(db, { issuer: "i", sub: "bob", kind: "human", name: "Bob" }, [], null);
+    orgB = await createOrg(db, u.id, "Beta Corp");
+    owner = (await getPrincipal(db, u.id, orgB.id))!;
+    bAgent = await createAgent(db, owner, { name: "b-coder" });
+    bBoard = await createBoard(db, owner, "B board");
+    bTask = await createTask(db, bAgent, { title: "secret", boardId: bBoard.id, confirmed: true });
+  });
+
+  it("memberships carry per-org roles; agents belong to exactly one org", async () => {
+    expect(owner).toMatchObject({ role: "admin", orgId: orgB.id });
+    expect((await getPrincipal(db, admin.id))!.orgId).not.toBe(orgB.id); // Ada still lives in the default org
+    expect(await getPrincipal(db, admin.id, orgB.id)).toBeNull(); // and is no member of B
+    expect(bAgent.orgId).toBe(orgB.id);
+    expect((await listOrgs(db, owner.id)).map((o) => o.id)).toEqual([orgB.id]);
+  });
+
+  it("reads never leak across orgs", async () => {
+    expect(await listTasks(db, admin)).toEqual(expect.not.arrayContaining([expect.objectContaining({ id: bTask.id })]));
+    expect((await listTasks(db, admin, { boardId: bBoard.id }))).toEqual([]);
+    expect((await listBoards(db, admin)).map((b) => b.id)).not.toContain(bBoard.id);
+    expect((await listBoards(db, owner)).map((b) => b.id)).toEqual([bBoard.id]);
+    expect((await listPrincipals(db, admin)).map((p) => p.id)).not.toEqual(expect.arrayContaining([bAgent.id, owner.id]));
+    expect((await listPrincipals(db, owner)).map((p) => p.id).sort()).toEqual([bAgent.id, owner.id].sort());
+    expect((await inbox(db, admin)).map((i) => i.task.id)).not.toContain(bTask.id);
+    expect((await listActivity(db, admin, {})).map((e) => e.taskId)).not.toContain(bTask.id);
+    expect((await overview(db, admin)).agents.map((a) => a.id)).not.toContain(bAgent.id);
+    expect((await listApiKeys(db, admin)).length).toBe(0);
+  });
+
+  it("every id-based call on another org's task is not_found", async () => {
+    const id = bTask.id;
+    const calls = [
+      () => getTask(db, admin, id), () => updateTask(db, admin, id, { title: "x" }), () => moveTask(db, admin, id, "in_progress"),
+      () => claimTask(db, agentA, id), () => heartbeatTask(db, agentA, id), () => requestInput(db, admin, id, "q?"),
+      () => answerInput(db, admin, id, "a"), () => assignTask(db, admin, id, null), () => addComment(db, admin, id, "hi"),
+    ];
+    for (const c of calls) expect(await code(c())).toBe("not_found");
+    expect((await getTask(db, owner, id)).title).toBe("secret"); // untouched
+  });
+
+  it("writes can't target another org's board, assignee, agent, key or role", async () => {
+    expect(await code(createTask(db, admin, { title: "x", boardId: bBoard.id }))).toBe("not_found");
+    expect(await code(renameBoard(db, admin, bBoard.id, "hijack"))).toBe("not_found");
+    const mine = await createTask(db, admin, { title: "mine", confirmed: true });
+    expect(await code(assignTask(db, admin, mine.id, bAgent.id))).toBe("not_found");
+    expect(await code(createApiKey(db, admin, bAgent.id))).toBe("not_found");
+    const k = await createApiKey(db, owner, bAgent.id);
+    await revokeApiKey(db, admin, k.id); // silently a no-op across orgs
+    expect((await verifyApiKey(db, k.key))?.orgId).toBe(orgB.id);
+    expect(await code(updatePrincipal(db, admin, owner.id, { role: "member" }))).toBe("not_found");
+  });
+});
+
+describe("invites and members", () => {
+  it("an invite link adds a person to the org once, optionally only for one email", async () => {
+    const eve = await upsertOidcPrincipal(db, { issuer: "i", sub: "eve", kind: "human", name: "Eve", email: "eve@x.io" }, [], null);
+    const mallory = await upsertOidcPrincipal(db, { issuer: "i", sub: "mal", kind: "human", name: "Mal", email: "mal@x.io" }, [], null);
+    const inv = await createInvite(db, admin, { email: "Eve@x.io", role: "member" });
+    expect(await code(createInvite(db, human, {}))).toBe("forbidden");
+    expect((await listInvites(db, admin)).map((i) => i.id)).toEqual([inv.id]);
+    expect(await code(acceptInvite(db, mallory.id, inv.token))).toBe("forbidden"); // wrong email
+    expect(await code(acceptInvite(db, eve.id, "inv_bogus"))).toBe("not_found");
+    const org = await acceptInvite(db, eve.id, inv.token);
+    expect((await getPrincipal(db, eve.id, org.id))).toMatchObject({ role: "member", orgId: admin.orgId });
+    expect(await code(acceptInvite(db, eve.id, inv.token))).toBe("not_found"); // spent
+    expect(await listInvites(db, admin)).toEqual([]);
+    await db.query(`UPDATE invites SET accepted_at=NULL, expires_at=now()-interval '1 minute'`);
+    expect(await code(acceptInvite(db, mallory.id, inv.token))).toBe("not_found"); // expired
+  });
+
+  it("removing a member unassigns their tasks and never the last admin", async () => {
+    const t = await createTask(db, human, { title: "mine", confirmed: true });
+    await assignTask(db, human, t.id, human.id);
+    await removeMember(db, admin, human.id);
+    expect(await getPrincipal(db, human.id, admin.orgId)).toBeNull();
+    expect((await getTask(db, admin, t.id)).assigneeId).toBeNull();
+    expect(await code(removeMember(db, admin, admin.id))).toBe("invalid");
+    expect(await code(removeMember(db, admin, agentA.id))).toBe("invalid");
+    expect(await code(removeMember(db, admin, human.id))).toBe("not_found");
+  });
+});
+
+describe("open sign-up limits", () => {
+  it("a person can't mint unlimited organizations", async () => {
+    const u = await upsertOidcPrincipal(db, { issuer: "i", sub: "spam", kind: "human", name: "Spam" }, [], null);
+    for (let i = 0; i < 10; i++) await createOrg(db, u.id, `Org ${i}`);
+    expect(await code(createOrg(db, u.id, "One too many"))).toBe("invalid");
   });
 });

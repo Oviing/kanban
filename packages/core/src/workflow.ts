@@ -14,7 +14,10 @@ export interface Principal {
   id: string;
   kind: "human" | "agent";
   name: string;
+  /** Role within `orgId` (agents are always members). */
   role: "admin" | "member";
+  /** The organization this principal is acting in; every query is scoped to it. */
+  orgId: string;
 }
 
 export interface TaskCtx {

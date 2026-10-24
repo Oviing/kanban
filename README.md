@@ -69,7 +69,7 @@ Or use an OIDC token from your IdP's client-credentials grant (`Authorization: B
 
 ## Configuration
 
-See `.env.example`. Required: `DATABASE_URL`, `PUBLIC_URL`, `SESSION_SECRET` (32+ chars), `OIDC_ISSUER`, `OIDC_CLIENT_ID`. Register `<PUBLIC_URL>/auth/callback` as the redirect URI at your IdP. The first human to sign in becomes admin; add more via `OIDC_ADMIN_EMAILS` (needs `email_verified`) or the UI.
+See `.env.example`. Required: `DATABASE_URL`, `PUBLIC_URL`, `SESSION_SECRET` (32+ chars), `OIDC_ISSUER`, `OIDC_CLIENT_ID`. Register `<PUBLIC_URL>/auth/callback` as the redirect URI at your IdP. Set `MULTI_TENANT=true` to host many independent organizations on one deployment (see [docs/self-hosting.md](docs/self-hosting.md#multi-tenant-many-organizations-one-mcp-endpoint)). The first human to sign in becomes admin; add more via `OIDC_ADMIN_EMAILS` (needs `email_verified`) or the UI.
 
 **Set `OIDC_AUDIENCE` in production** and configure your IdP to put it in agent tokens; without it any token from your issuer is accepted.
 

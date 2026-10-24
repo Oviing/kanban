@@ -311,3 +311,7 @@ a { color:var(--accent); text-decoration:none; }
 .quick { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; } .quick button { background:var(--panel); color:var(--fg); box-shadow:0 0 0 .5px var(--line2); padding:7px 14px; min-height:36px; }
 .quick button:hover:not(:disabled) { background:var(--accent); color:#fff; filter:none; }
 .inb-actions .opt { background:var(--fill); color:var(--fg); }
+.orgsel { max-width:160px; text-overflow:ellipsis; background:var(--fill); }
+@media (max-width: 700px) { .orgsel { max-width:110px; } }
+.btn.plain { white-space:nowrap; } .admin input[type=email] { min-width:280px; }
+.login .btn { display:inline-flex; align-items:center; gap:10px; }

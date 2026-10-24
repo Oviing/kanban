@@ -84,6 +84,44 @@ const MIGRATIONS: string[] = [
   `
   ALTER TABLE tasks ADD COLUMN question_options text[] NOT NULL DEFAULT '{}';
   `,
+  // Multi-tenancy: organizations own boards and agents; humans join organizations through memberships.
+  `
+  CREATE TABLE organizations (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    name text NOT NULL,
+    slug text NOT NULL UNIQUE,
+    created_at timestamptz NOT NULL DEFAULT now()
+  );
+  CREATE TABLE memberships (
+    org_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    principal_id uuid NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+    role text NOT NULL DEFAULT 'member' CHECK (role IN ('admin','member')),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (org_id, principal_id)
+  );
+  CREATE INDEX memberships_principal ON memberships (principal_id);
+  CREATE TABLE invites (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    email text NOT NULL DEFAULT '',
+    role text NOT NULL DEFAULT 'member' CHECK (role IN ('admin','member')),
+    token_hash text NOT NULL UNIQUE,
+    created_by uuid NOT NULL REFERENCES principals(id),
+    expires_at timestamptz NOT NULL,
+    accepted_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now()
+  );
+  ALTER TABLE principals ADD COLUMN org_id uuid REFERENCES organizations(id);
+  ALTER TABLE boards ADD COLUMN org_id uuid REFERENCES organizations(id) ON DELETE CASCADE;
+  INSERT INTO organizations (name, slug) VALUES ('Default', 'default');
+  UPDATE boards SET org_id = (SELECT id FROM organizations WHERE slug = 'default');
+  UPDATE principals SET org_id = (SELECT id FROM organizations WHERE slug = 'default') WHERE kind = 'agent';
+  INSERT INTO memberships (org_id, principal_id, role)
+    SELECT (SELECT id FROM organizations WHERE slug = 'default'), id, role FROM principals WHERE kind = 'human';
+  ALTER TABLE boards ALTER COLUMN org_id SET NOT NULL;
+  ALTER TABLE principals DROP COLUMN role;
+  CREATE INDEX boards_org ON boards (org_id);
+  `,
 ];
 
 export async function migrate(db: Db): Promise<void> {
