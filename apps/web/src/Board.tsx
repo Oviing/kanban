@@ -3,6 +3,7 @@ import { COLUMNS, api, isLive, isStale, leaseMinutesLeft, type InboxItem, type P
 import { TaskDrawer } from "./TaskDrawer";
 import { InboxSidebar } from "./Inbox";
 import { askSummary } from "./prompts";
+import { Avatar, Ring } from "./ui";
 
 interface BoardInfo { id: string; name: string; humanInLoop: boolean }
 
@@ -128,21 +129,20 @@ export function Board({ me }: { me: Principal }) {
       >
         <div className="ct">{t.title}</div>
         {t.status === "review" && t.reviewSummary && <div className="clamp">{t.reviewSummary}</div>}
+        {t.needsInput && <div className="ask-box" title={t.question ?? ""}><b>{who ? `${who.name} is asking` : "Question"}</b>{t.question}</div>}
         <div className="meta">
           {t.priority >= 3 && <span className="chip hot">P{t.priority}</span>}
           {t.labels.map((l) => <span key={l} className="label">{l}</span>)}
+          {isStale(t) && <span className="chip warn" title="The agent's claim lease expired; another agent may take it over">stale{left !== null ? ` ${-left}m` : ""}</span>}
+          {t.status === "review" && t.reviewLinks.length > 0 && <a className="lnk" href={/^https?:/.test(t.reviewLinks[0]) ? t.reviewLinks[0] : undefined} target="_blank" rel="noreferrer noopener" onClick={(e) => e.stopPropagation()}>{t.reviewLinks.length} link{t.reviewLinks.length > 1 ? "s" : ""} ↗</a>}
           {who && (
             <span className={`who ${who.kind}`}>
-              {isLive(t) && <i className="pulse" title="Agent is active; its lease renews on every sign of life" />}
+              <Avatar name={who.name} kind={who.kind} />
               {who.name}
+              {(isLive(t) || isStale(t)) && left !== null && <Ring left={left} total={leaseTotal} />}
             </span>
           )}
-          {isStale(t) && <span className="chip warn" title="The agent's claim lease expired; another agent may take it over">stale{left !== null ? ` ${-left}m` : ""}</span>}
-          {isLive(t) && left !== null && <span className="lease">lease {left}m</span>}
-          {t.status === "review" && t.reviewLinks.length > 0 && <span className="lease strong">{t.reviewLinks.length} link{t.reviewLinks.length > 1 ? "s" : ""}</span>}
         </div>
-        {isLive(t) && left !== null && <div className="bar"><i style={{ width: `${Math.max(0, Math.min(100, (left / leaseTotal) * 100))}%` }} /></div>}
-        {t.needsInput && <div className="chip ask block" title={t.question ?? ""}>Needs input: {t.question}</div>}
         {t.status === "proposed" && t.moves.confirmed.ok && (
           <button className="confirm" onClick={(e) => { e.stopPropagation(); move(t.id, "confirmed"); }}>Confirm</button>
         )}
@@ -156,6 +156,7 @@ export function Board({ me }: { me: Principal }) {
       <InboxSidebar open={inboxOpen} onToggle={toggleInbox} items={inbox} boards={boards} people={people} onOpen={setOpen} act={act} move={move} />
       <div className="board-main">
       <div className="toolbar">
+        <h1 className="page-title">Board</h1>
         <div className="projects" role="tablist" aria-label="Projects">
           {boards.map((b) => (
             <button key={b.id} role="tab" aria-selected={b.id === boardId} className={b.id === boardId ? "active" : ""} onClick={() => select(b.id)}>{b.name}</button>
@@ -166,14 +167,14 @@ export function Board({ me }: { me: Principal }) {
         <span className="spacer" />
         {current && !current.humanInLoop && <span className="chip auto" title="No human confirmation or approval is required in this project">autonomous</span>}
         {me.kind === "human" && me.role === "admin" && current && (
-          <button onClick={toggleLoop} title="Whether a human must confirm tasks and approve reviews">{current.humanInLoop ? "Humans in loop: on" : "Humans in loop: off"}</button>
+          <button className="loop" role="switch" aria-checked={current.humanInLoop} onClick={toggleLoop} title="Whether a human must confirm tasks and approve reviews"><span>Humans in loop</span><span className={`switch${current.humanInLoop ? " on" : ""}`} aria-hidden="true" /></button>
         )}
       </div>
 
       <div className="filters">
         <form className="newtask" onSubmit={add}>
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={me.kind === "human" ? "New task (created confirmed)…" : "New task (starts as proposed)…"} aria-label="New task title" />
-          <button className="primary">Add task</button>
+          <button className="primary" disabled={!title.trim()}>Add task</button>
         </form>
         <select value={assignee} onChange={(e) => setAssignee(e.target.value)} aria-label="Filter by assignee">
           <option value="">All assignees</option>
@@ -198,7 +199,7 @@ export function Board({ me }: { me: Principal }) {
               onDrop={(e) => { e.preventDefault(); const t = dragging; setDragging(null); if (t?.moves[col.status].ok) move(t.id, col.status); }}
             >
               <h2>
-                {col.title} <small>{items.length}</small>
+                <i className={`dot s-${col.status}`} />{col.title} <small>{items.length}</small>
                 {col.status === "done" && items.length > 0 && <button className="linklike" onClick={() => setShowDone((v) => !v)}>{showDone ? "hide" : "show"}</button>}
               </h2>
               {dragging && cls === "drop-no" && hint && <p className="why">{hint}</p>}

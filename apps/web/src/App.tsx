@@ -3,6 +3,7 @@ import { ApiError, api, type Principal } from "./api";
 import { Board } from "./Board";
 import { Agents } from "./Agents";
 import { Admin } from "./Admin";
+import { Avatar } from "./ui";
 
 type Page = "board" | "agents" | "keys";
 
@@ -30,22 +31,22 @@ export function App() {
       </div>
     );
 
-  const initials = me.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
   const tab = (p: Page, label: string) => (
     <button className={page === p ? "active" : ""} aria-current={page === p ? "page" : undefined} onClick={() => go(p)}>{label}</button>
   );
   return (
     <>
-      <header className={`top ${page === "agents" ? "dark" : ""}`}>
-        <strong className="brand">Agent Kanban</strong>
-        <nav aria-label="Views">
+      <header className="top">
+        <strong className="brand"><span className="glyph"><i /></span>Kanban</strong>
+        <nav className="seg" aria-label="Views">
           {tab("board", "Board")}
           {tab("agents", "Agents")}
           {me.role === "admin" && me.kind === "human" && tab("keys", "Keys")}
         </nav>
-        <span className="spacer" />
-        {me.authMode === "none" ? <span className="chip warn" title="Running without authentication">no auth</span> : <button onClick={logout}>Sign out</button>}
-        <span className="avatar" title={`${me.name}${me.role === "admin" ? " (admin)" : ""}`}>{initials}</span>
+        <div className="right">
+          {me.authMode === "none" ? <span className="chip warn" title="Running without authentication">no auth</span> : <button className="btn plain" onClick={logout}>Sign out</button>}
+          <span title={`${me.name}${me.role === "admin" ? " (admin)" : ""}`}><Avatar name={me.name} kind="human" size={28} /></span>
+        </div>
       </header>
       {page === "board" && <Board me={me} />}
       {page === "agents" && <Agents me={me} />}
