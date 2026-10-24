@@ -54,7 +54,8 @@ export function buildTimeline(agents: AgentRow[], feed: ActivityItem[], now: num
     const claims = events.filter((e) => (e.type === "claimed" || e.type === "taken_over") && e.actorName === agent.name && e.actorKind === "agent");
     for (const c of claims) {
       const from = new Date(c.createdAt).getTime();
-      const next = events.find((e) => e.taskId === c.taskId && e.id > c.id && (e.type === "moved" || e.type === "released"));
+      // A takeover by someone else ends this agent's run just like a move or release does.
+      const next = events.find((e) => e.taskId === c.taskId && e.id > c.id && (e.type === "moved" || e.type === "released" || (e.type === "taken_over" && e.actorName !== agent.name)));
       const to = next ? new Date(next.createdAt).getTime() : now;
       if (to < start) continue;
       const task = agent.tasks.find((t) => t.id === c.taskId);

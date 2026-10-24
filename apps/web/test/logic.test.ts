@@ -44,6 +44,13 @@ describe("buildTimeline", () => {
     expect(seg.width).toBeCloseTo(16.7, 0);
     expect(buildTimeline([agent({ state: "stale", tasks: [t] })], [ev(1, "claimed", 10)], now)[0].segs[0].kind).toBe("stale");
   });
+  it("ends the previous owner's bar when another agent takes the task over", () => {
+    const other = (id: number, type: string, min: number): ActivityItem => ({ ...ev(id, type, min), actorName: "Orbit" });
+    const [lane] = buildTimeline([agent({})], [ev(1, "claimed", 40), other(2, "taken_over", 20)], now);
+    expect(lane.segs).toHaveLength(1);
+    expect(lane.segs[0].kind).toBe("released");
+    expect(lane.segs[0].width).toBeCloseTo(33.3, 0);
+  });
   it("draws claims older than the window from the left edge", () => {
     const t = { id: "t9", title: "old", status: "in_progress" as const, needsInput: false, question: null, leaseExpiresAt: null };
     expect(buildTimeline([agent({ tasks: [t] })], [], now)[0].segs[0]).toMatchObject({ left: 0, width: 100, kind: "working" });
