@@ -49,3 +49,35 @@ describe("buildTimeline", () => {
     expect(buildTimeline([agent({ tasks: [t] })], [], now)[0].segs[0]).toMatchObject({ left: 0, width: 100, kind: "working" });
   });
 });
+
+import { parseInline, parseMarkdown } from "../src/markdown";
+
+describe("markdown", () => {
+  it("parses inline styles, links and mentions of known people", () => {
+    expect(parseInline("**hi** `x` _y_ @Local user ok", ["Local user"]).map((n) => n.t)).toEqual(["b", "text", "code", "text", "i", "text", "mention", "text"]);
+    expect(parseInline("see https://a.io/x, and [docs](https://b.io)")).toMatchObject([{ t: "text" }, { t: "a", href: "https://a.io/x" }, { t: "text" }, { t: "a", href: "https://b.io" }]);
+  });
+  it("never turns other schemes into links and leaves unknown mentions as text", () => {
+    expect(parseInline("[x](javascript:alert(1)) @ghost").every((n) => n.t === "text")).toBe(true);
+    expect(parseInline("<img src=x onerror=alert(1)>")).toEqual([{ t: "text", v: "<img src=x onerror=alert(1)>" }]);
+  });
+  it("groups blocks: paragraphs, fenced code and lists", () => {
+    const b = parseMarkdown("Intro\nline two\n\n- a\n- b\n\n1. one\n\n```\ncode **not bold**\n```");
+    expect(b.map((x) => x.t)).toEqual(["p", "ul", "ol", "code"]);
+    expect(b[1]).toMatchObject({ items: [[{ t: "text", v: "a" }], [{ t: "text", v: "b" }]] });
+    expect(b[3]).toEqual({ t: "code", v: "code **not bold**" });
+  });
+});
+
+import { parseRoute, routeHash } from "../src/route";
+
+describe("routes", () => {
+  it("round-trips board and task links", () => {
+    for (const r of [{ page: "board" as const }, { page: "board" as const, boardId: "b1" }, { page: "board" as const, boardId: "b1", taskId: "t 1" }, { page: "agents" as const }, { page: "keys" as const }])
+      expect(parseRoute(routeHash(r))).toEqual(r);
+  });
+  it("falls back for unknown or empty hashes", () => {
+    expect(parseRoute("", "agents")).toEqual({ page: "agents" });
+    expect(parseRoute("#/nope")).toEqual({ page: "board" });
+  });
+});

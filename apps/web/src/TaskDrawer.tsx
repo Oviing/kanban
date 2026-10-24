@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { api, ago, describeEvent, hostOf, isStale, leaseMinutesLeft, type Principal, type TaskDetail } from "./api";
 import { askSummary } from "./prompts";
 import { Avatar, Kbd } from "./ui";
+import { Markdown } from "./Markdown";
+import { MentionTextarea } from "./MentionTextarea";
 import { PRIORITY_LABEL } from "./logic";
 
 const NEXT: Record<string, { to: string; label: string; primary?: boolean }[]> = {
@@ -26,7 +28,7 @@ export function TaskDrawer({ id, me, people, boardName, rev, onClose, onChange }
 
   useEffect(() => { api<TaskDetail>(`/tasks/${id}`).then(setT, (e) => setError(e.message)); }, [id, rev]);
   useEffect(() => {
-    const h = (e: KeyboardEvent) => e.key === "Escape" && !document.querySelector(".dlg, .pal") && onClose();
+    const h = (e: KeyboardEvent) => e.key === "Escape" && !document.querySelector(".dlg, .pal, .mlist") && onClose();
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, [onClose]);
@@ -53,7 +55,10 @@ export function TaskDrawer({ id, me, people, boardName, rev, onClose, onChange }
     if (a.to === "review") { const s = await askSummary(); if (s === null) return; if (s) body.summary = s; }
     run(() => api(`/tasks/${id}/move`, { method: "POST", body }));
   };
-  const sendReply = () => { const a = reply.trim(); if (a) run(async () => { await api(`/tasks/${id}/answer`, { method: "POST", body: { answer: a } }); setReply(""); }); };
+  const answerWith = (a: string) => { if (a.trim()) run(async () => { await api(`/tasks/${id}/answer`, { method: "POST", body: { answer: a.trim() } }); setReply(""); }); };
+  const sendReply = () => answerWith(reply);
+  const names = Object.values(people).map((p) => p.name);
+  const everyone = Object.values(people);
   const sendComment = () => { if (comment.trim()) run(async () => { await api(`/tasks/${id}/comments`, { method: "POST", body: { body: comment } }); setComment(""); }); };
   const submitOnMeta = (fn: () => void) => (e: React.KeyboardEvent) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); fn(); } };
 
@@ -88,10 +93,15 @@ export function TaskDrawer({ id, me, people, boardName, rev, onClose, onChange }
       {t.needsInput && (
         <section className="ask-box big" aria-label="Open question">
           <b>{assignee ? `${assignee.name} needs your answer` : "Question"}</b>
-          <p>{t.question}</p>
+          <Markdown text={t.question ?? ""} names={names} />
+          {canAnswer && t.questionOptions?.length > 0 && (
+            <div className="quick" role="group" aria-label="Suggested answers">
+              {t.questionOptions.map((o) => <button key={o} onClick={() => answerWith(o)}>{o}</button>)}
+            </div>
+          )}
           {canAnswer && (
             <div className="reply">
-              <textarea value={reply} onChange={(e) => setReply(e.target.value)} onKeyDown={submitOnMeta(sendReply)} placeholder="Write your answer…" aria-label="Your answer" rows={2} />
+              <textarea value={reply} onChange={(e) => setReply(e.target.value)} onKeyDown={submitOnMeta(sendReply)} placeholder={t.questionOptions?.length ? "Or write your own answer…" : "Write your answer…"} aria-label="Your answer" rows={2} />
               <button className="primary" disabled={!reply.trim()} onClick={sendReply}>Answer</button>
             </div>
           )}
@@ -102,7 +112,7 @@ export function TaskDrawer({ id, me, people, boardName, rev, onClose, onChange }
       {t.reviewSummary && (
         <section className="evidence">
           <h3>Evidence from {assignee?.name ?? "the assignee"}</h3>
-          <p>{t.reviewSummary}</p>
+          <Markdown text={t.reviewSummary} names={names} />
           {t.reviewLinks.map((l) => (
             <a key={l} href={/^https?:/.test(l) ? l : undefined} target="_blank" rel="noreferrer noopener" className="evlink">
               <span className="evic"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true"><path d="M6 8l2-2M5 5.5l1.2-1.2a2 2 0 013 3L8 8.5M9 8.5l-1.2 1.2a2 2 0 01-3-3L6 5.5" /></svg></span>
@@ -123,11 +133,11 @@ export function TaskDrawer({ id, me, people, boardName, rev, onClose, onChange }
       <h3 className="lbl">Comments</h3>
       {t.comments.map((c) => (
         <div key={c.id} className="comment">
-          <Avatar name={c.authorName} kind={c.authorKind} size={20} /><div><b>{c.authorName}</b><time>{ago(c.createdAt)}</time><p>{c.body}</p></div>
+          <Avatar name={c.authorName} kind={c.authorKind} size={20} /><div><b>{c.authorName}</b><time>{ago(c.createdAt)}</time><Markdown text={c.body} names={names} /></div>
         </div>
       ))}
       <div className="composer">
-        <textarea value={comment} onChange={(e) => setComment(e.target.value)} onKeyDown={submitOnMeta(sendComment)} placeholder="Add a comment…" aria-label="Add a comment" rows={1} />
+        <MentionTextarea value={comment} onChange={setComment} people={everyone} onKeyDown={submitOnMeta(sendComment)} placeholder="Add a comment…  @ mentions, **bold**, `code`" aria-label="Add a comment" rows={1} />
         <Kbd>⌘↵</Kbd>
         <button disabled={!comment.trim()} onClick={sendComment}>Send</button>
       </div>

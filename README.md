@@ -38,12 +38,12 @@ docker run -d -p 127.0.0.1:3000:3000 -v kanban-data:/app/data \
 
 ### Screens
 
-- **Board:** project tabs, a hideable "Needs you" sidebar on the left (approvals, questions, stale claims; collapses to a rail with a count, remembered per browser, `[` toggles it), five columns with rule-aware drag & drop (Done is collapsed until you open it), and lease rings on active cards. Agents show as rounded squares, humans as circles. A question from an agent appears inside its card. The quick-capture bar understands `Fix login !high @nova #atlas` (priority, assignee, project); filter chips narrow the board to "Waiting on me", stale tasks, an assignee or a priority. On phones the board shows one column at a time with a column picker and a bottom tab bar.
-- **Task sheet:** slides in over the board with the agent's question first (answer it inline), a facts strip (assignee, priority, lease, last update), review evidence with link cards, comments (`⌘↵` sends) and an activity timeline that shows status changes. Esc closes it.
+- **Board:** project tabs, a hideable "Needs you" sidebar on the left (approvals, questions, stale claims; collapses to a rail with a count, remembered per browser, `[` toggles it), five columns with rule-aware drag & drop (Done is collapsed until you open it), and lease rings on active cards. Every card also has a Move menu (the `⋯` button, or `m` on a focused card) that works with keyboard and touch and explains why a move is not allowed. Agents show as rounded squares, humans as circles. A question from an agent appears inside its card. The quick-capture bar understands `Fix login !high @nova #atlas` (priority, assignee, project); filter chips narrow the board to "Waiting on me", stale tasks, an assignee or a priority. On phones the board shows one column at a time with a column picker and a bottom tab bar.
+- **Task sheet:** slides in over the board with the agent's question first (answer it inline, or with one click when the agent offered suggested answers), a facts strip (assignee, priority, lease, last update), review evidence with link cards, comments with Markdown (bold, italic, code, links, lists) and `@mentions` autocomplete (`⌘↵` sends), and an activity timeline that shows status changes. Esc closes it. Every task has a shareable link (`#/b/<project>/t/<task>`) and the browser back button closes the sheet.
 - **Agents:** a supervision view per project: working / waiting-on-human / stale / done-today counters, a 60-minute run timeline with one lane per agent (claims, questions, reviews, expired leases; *Answer* and *Release to board* buttons right in the lane), a live activity feed filterable by humans or agents, and a pipeline bar. Backed by `GET /api/overview` and `GET /api/activity`.
 - **Keys:** agents and API keys (admins).
 - **Command palette:** `⌘K` / `Ctrl K` searches tasks, jumps to a project or view, and runs actions on the top match (answer, confirm, release, move, approve).
-- **Theme and keyboard:** a System / Light / Dark switch in the top bar. Shortcuts: `c` new task, `j`/`k` move between cards, `Enter` open, `[` toggle Needs you, `g` then `b`/`a`/`k` go to Board/Agents/Keys, `?` list all.
+- **Theme and keyboard:** a System / Light / Dark switch in the top bar. Shortcuts: `c` new task, `j`/`k` move between cards, `Enter` open, `m` move menu, `[` toggle Needs you, `g` then `b`/`a`/`k` go to Board/Agents/Keys, `?` list all.
 
 ### Supervision features
 
@@ -56,7 +56,7 @@ Rules live in one place (`packages/core/src/workflow.ts`) and are shared by the 
 
 ## MCP tools
 
-`whoami`, `list_boards`, `list_principals`, `list_tasks`, `get_task`, `create_task`, `update_task`, `confirm_task`, `claim_task`, `release_task`, `move_task`, `assign_task`, `heartbeat_task`, `request_input`, `answer_input`, `inbox`, `add_comment`, plus an `agent-workflow` prompt.
+`whoami`, `list_boards`, `list_principals`, `list_tasks`, `get_task`, `create_task`, `update_task`, `confirm_task`, `claim_task`, `release_task`, `move_task`, `assign_task`, `heartbeat_task`, `request_input` (optionally with up to 6 suggested `options` that humans can pick with one click), `answer_input`, `inbox`, `add_comment`, plus an `agent-workflow` prompt.
 
 Connect with an API key (create one under *Agents & keys* in the UI; admins only):
 

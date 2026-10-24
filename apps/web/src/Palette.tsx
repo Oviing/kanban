@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { COLUMNS, api, type Principal, type Status, type Task } from "./api";
 import { askAnswer, askSummary } from "./prompts";
 import { Kbd } from "./ui";
+import type { Page } from "./route";
 
-export type Page = "board" | "agents" | "keys";
 interface Row { id: string; group: string; label: string; sub?: string; key?: string; icon: string; run: () => void | Promise<void> }
 
 const ICON = {

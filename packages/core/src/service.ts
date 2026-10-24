@@ -26,6 +26,8 @@ export interface Task {
   version: number;
   needsInput: boolean;
   question: string | null;
+  /** Suggested one-click answers the asker offered with the question (may be empty). */
+  questionOptions: string[];
   /** Who asked the pending question; they cannot answer it. */
   questionBy: string | null;
   leaseExpiresAt: string | null;
@@ -45,7 +47,7 @@ export const taskCtx = (t: Task): TaskCtx => ({
 const TASK_COLS = `id, board_id AS "boardId", title, description, status, priority, labels,
   created_by AS "createdBy", assignee_id AS "assigneeId", confirmed_by AS "confirmedBy",
   confirmed_at AS "confirmedAt", version,
-  needs_input AS "needsInput", question, question_by AS "questionBy", lease_expires_at AS "leaseExpiresAt",
+  needs_input AS "needsInput", question, question_options AS "questionOptions", question_by AS "questionBy", lease_expires_at AS "leaseExpiresAt",
   review_summary AS "reviewSummary", review_links AS "reviewLinks",
   created_at AS "createdAt", updated_at AS "updatedAt"`;
 
@@ -380,18 +382,20 @@ export async function heartbeatTask(db: Db, actor: Principal, id: string): Promi
   return load(db, id);
 }
 
-export async function requestInput(db: Db, actor: Principal, id: string, question: string): Promise<Task> {
+export async function requestInput(db: Db, actor: Principal, id: string, question: string, options: string[] = []): Promise<Task> {
   if (!question?.trim()) throw new KanbanError("invalid", "question is required");
+  const opts = [...new Set(options.map((o) => o.trim()).filter(Boolean))];
+  if (opts.length > 6 || opts.some((o) => o.length > 80)) throw new KanbanError("invalid", "at most 6 options of up to 80 characters");
   const task = await db.tx(async (t) => {
     const cur = await load(t, id, true);
     if (cur.status === "done") throw new KanbanError("invalid", "task is done");
     const { rows } = await t.query<Task>(
-      `UPDATE tasks SET needs_input=true, question=$2, question_by=$3, version=version+1, updated_at=now() WHERE id=$1 RETURNING ${TASK_COLS}`,
-      [id, question.trim(), actor.id],
+      `UPDATE tasks SET needs_input=true, question=$2, question_by=$3, question_options=$4, version=version+1, updated_at=now() WHERE id=$1 RETURNING ${TASK_COLS}`,
+      [id, question.trim(), actor.id, opts],
     );
     await t.query(`INSERT INTO comments (task_id, author_id, body) VALUES ($1,$2,$3)`, [id, actor.id, `Question: ${question.trim()}`]);
     await touchLease(t, id, actor);
-    await logEvent(t, id, actor, "input_requested", { question: question.trim() });
+    await logEvent(t, id, actor, "input_requested", { question: question.trim(), ...(opts.length ? { options: opts } : {}) });
     return rows[0];
   });
   notify(task.boardId, id, "input_requested");

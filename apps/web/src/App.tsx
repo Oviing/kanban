@@ -5,10 +5,10 @@ import { Agents } from "./Agents";
 import { Admin } from "./Admin";
 import { Avatar, Kbd, isTyping } from "./ui";
 import { DialogHost } from "./dialog";
-import { Palette, type Page } from "./Palette";
+import { Palette } from "./Palette";
+import { navigate, useRoute, type Page } from "./route";
 import { NEXT_THEME, useTheme } from "./theme";
 
-export interface Jump { boardId: string; taskId?: string; n: number }
 const SHORTCUTS: [string, string][] = [
   ["⌘K  or  Ctrl K", "Command palette"], ["c", "New task"], ["j  /  k", "Next / previous card"], ["Enter", "Open the focused card"],
   ["[", "Show or hide Needs you"], ["g then b / a / k", "Go to Board / Agents / Keys"], ["Esc", "Close the open sheet or dialog"], ["?", "This list"],
@@ -17,14 +17,15 @@ const THEME_LABEL = { system: "System", light: "Light", dark: "Dark" } as const;
 
 export function App() {
   const [me, setMe] = useState<Principal | null | undefined>(undefined);
-  const [page, setPage] = useState<Page>(() => (localStorage.getItem("kb_page") as Page) || "board");
   const [palette, setPalette] = useState(false);
   const [help, setHelp] = useState(false);
-  const [jump, setJump] = useState<Jump>();
   const [live, setLive] = useState<boolean | null>(null);
   const [theme, setTheme] = useTheme();
   const chord = useRef(0);
-  const go = useCallback((p: Page) => { localStorage.setItem("kb_page", p); setPage(p); }, []);
+  const route = useRoute((localStorage.getItem("kb_page") as Page) || "board");
+  const page = route.page;
+  useEffect(() => { localStorage.setItem("kb_page", page); }, [page]);
+  const go = useCallback((p: Page) => navigate(p === "board" ? { page: p, boardId: localStorage.getItem("kb_board") ?? undefined } : { page: p }), []);
 
   useEffect(() => {
     api<Principal>("/me").then(setMe, (e) => (e instanceof ApiError && e.status === 401 ? setMe(null) : Promise.reject(e)));
@@ -46,7 +47,7 @@ export function App() {
     go("board");
     setTimeout(() => window.dispatchEvent(new Event("kb:new-task")), page === "board" ? 0 : 60);
   }, [go, page]);
-  const jumpTo = useCallback((boardId: string, taskId?: string) => { go("board"); setJump({ boardId, taskId, n: Date.now() }); }, [go]);
+  const jumpTo = useCallback((boardId: string, taskId?: string) => navigate({ page: "board", boardId, taskId }, { task: !!taskId }), []);
   const cycleTheme = useCallback(() => setTheme(NEXT_THEME[theme]), [theme, setTheme]);
 
   useEffect(() => {
@@ -113,7 +114,7 @@ export function App() {
         </div>
       </header>
       <div id="main">
-        {page === "board" && <Board me={me} jump={jump} />}
+        {page === "board" && <Board me={me} route={route} />}
         {page === "agents" && <Agents me={me} />}
         {page === "keys" && <Admin />}
       </div>

@@ -5,17 +5,28 @@ import { InboxSidebar } from "./Inbox";
 import { askName, askSummary } from "./prompts";
 import { Avatar, Kbd, Ring, isTyping, useMedia } from "./ui";
 import { PRIORITY_LABEL, parseCapture } from "./logic";
-import type { Jump } from "./App";
+import { Markdown } from "./Markdown";
+import { closeTask, navigate, type Route } from "./route";
 
 interface BoardInfo { id: string; name: string }
 
-export function Board({ me, jump }: { me: Principal; jump?: Jump }) {
+export function Board({ me, route }: { me: Principal; route: Route }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [inbox, setInbox] = useState<InboxItem[]>([]);
   const [people, setPeople] = useState<Record<string, Principal>>({});
   const [boards, setBoards] = useState<BoardInfo[]>([]);
-  const [boardId, setBoardId] = useState<string | undefined>(() => localStorage.getItem("kb_board") ?? undefined);
-  const [open, setOpen] = useState<string | null>(null);
+  const [boardId, setBoardId] = useState<string | undefined>(() => route.boardId ?? localStorage.getItem("kb_board") ?? undefined);
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number }>({ right: 0 });
+  // The menu is position:fixed so the scrolling column container can't clip it; flip upward near the bottom.
+  const openMenu = (id: string, card: Element | null) => {
+    const r = card?.querySelector(".cmenu")?.getBoundingClientRect();
+    if (r) setMenuPos(r.bottom + 240 > window.innerHeight ? { bottom: window.innerHeight - r.top + 4, right: window.innerWidth - r.right } : { top: r.bottom + 4, right: window.innerWidth - r.right });
+    setMenuFor(id);
+  };
+  const [announce, setAnnounce] = useState("");
+  const open = route.taskId ?? null;
+  const setOpen = useCallback((id: string) => navigate({ page: "board", boardId, taskId: id }, { task: true }), [boardId]);
   const [error, setError] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [rev, setRev] = useState(0);
@@ -58,13 +69,12 @@ export function Board({ me, jump }: { me: Principal; jump?: Jump }) {
     es.addEventListener("change", () => load().catch(() => {}));
     return () => es.close();
   }, [load]);
-  // The command palette can send us to a project and/or a task.
+  // Links and the command palette address a project and/or task through the URL.
   useEffect(() => {
-    if (!jump) return;
-    localStorage.setItem("kb_board", jump.boardId);
-    setBoardId(jump.boardId);
-    setOpen(jump.taskId ?? null);
-  }, [jump]);
+    if (!route.boardId) return;
+    localStorage.setItem("kb_board", route.boardId);
+    setBoardId(route.boardId);
+  }, [route.boardId]);
   useEffect(() => {
     const focus = () => { capture.current?.focus(); capture.current?.scrollIntoView({ block: "nearest" }); };
     window.addEventListener("kb:new-task", focus);
@@ -87,6 +97,16 @@ export function Board({ me, jump }: { me: Principal; jump?: Jump }) {
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, [toggleInbox]);
+  useEffect(() => {
+    if (!menuFor) return;
+    document.querySelector<HTMLButtonElement>(".movemenu button:not(:disabled)")?.focus();
+    const away = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest(".movemenu, .cmenu")) setMenuFor(null); };
+    const close = () => setMenuFor(null);
+    window.addEventListener("click", away);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => { window.removeEventListener("click", away); window.removeEventListener("scroll", close, true); window.removeEventListener("resize", close); };
+  }, [menuFor]);
   // Leases expire with the clock, not with events: re-evaluate stale/live badges every 30s.
   useEffect(() => { const i = setInterval(() => { tick((n) => n + 1); load().catch(() => {}); }, 30_000); return () => clearInterval(i); }, [load]);
 
@@ -107,7 +127,7 @@ export function Board({ me, jump }: { me: Principal; jump?: Jump }) {
   };
   const preview = useMemo(() => (title.trim() ? parseCapture(title, Object.values(people), boards) : null), [title, people, boards]);
 
-  const select = (id: string) => { localStorage.setItem("kb_board", id); setBoardId(id); setOpen(null); };
+  const select = (id: string) => { localStorage.setItem("kb_board", id); setBoardId(id); navigate({ page: "board", boardId: id }, { replace: true }); };
   const newProject = async () => {
     const name = (await askName("New project"))?.trim();
     if (name) act(async () => select((await api<{ id: string }>("/boards", { method: "POST", body: { name } })).id));
@@ -127,6 +147,7 @@ export function Board({ me, jump }: { me: Principal; jump?: Jump }) {
       if (s) body.summary = s;
     }
     await act(() => api(`/tasks/${id}/move`, { method: "POST", body }));
+    setAnnounce(`Moved “${tasks.find((t) => t.id === id)?.title ?? "task"}” to ${COLUMNS.find((c) => c.status === to)?.title}`);
   };
 
   const dropState = (col: Status) => {
@@ -157,11 +178,38 @@ export function Board({ me, jump }: { me: Principal; jump?: Jump }) {
         onDragStart={(e) => { e.dataTransfer.setData("text/plain", t.id); setDragging(t); }}
         onDragEnd={() => setDragging(null)}
         onClick={() => setOpen(t.id)}
-        onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && setOpen(t.id)}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === "Enter") setOpen(t.id);
+          else if (e.key === "m") { e.preventDefault(); openMenu(t.id, e.currentTarget); }
+        }}
       >
+        <button className="cmenu" aria-label={`Move “${t.title}”…`} aria-haspopup="menu" aria-expanded={menuFor === t.id} draggable={false}
+          onClick={(e) => { e.stopPropagation(); menuFor === t.id ? setMenuFor(null) : openMenu(t.id, e.currentTarget.closest(".card")); }}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="3" cy="8" r="1.4" /><circle cx="8" cy="8" r="1.4" /><circle cx="13" cy="8" r="1.4" /></svg>
+        </button>
+        {menuFor === t.id && (
+          <div className="movemenu" role="menu" aria-label="Move to" style={menuPos} onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              const items = [...e.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
+              const i = items.indexOf(document.activeElement as HTMLButtonElement);
+              if (e.key === "ArrowDown") { e.preventDefault(); items[(i + 1) % items.length]?.focus(); }
+              else if (e.key === "ArrowUp") { e.preventDefault(); items[(i - 1 + items.length) % items.length]?.focus(); }
+              else if (e.key === "Escape") { e.stopPropagation(); setMenuFor(null); (e.currentTarget.closest(".card") as HTMLElement | null)?.focus(); }
+            }}>
+            {COLUMNS.filter((c) => c.status !== t.status).map((c) => {
+              const m = t.moves[c.status];
+              return (
+                <button key={c.status} role="menuitem" disabled={!m.ok} onClick={() => { setMenuFor(null); move(t.id, c.status); }}>
+                  Move to {c.title}{!m.ok && m.reason && <small>{m.reason.replace(/_/g, " ")}</small>}
+                </button>
+              );
+            })}
+          </div>
+        )}
         <div className="ct">{t.title}</div>
-        {t.needsInput && <div className="ask-box" title={t.question ?? ""}><b>{who ? `Question from ${who.name}` : "Question"}</b>{t.question}</div>}
-        {t.status === "review" && t.reviewSummary && <div className="clamp">{t.reviewSummary}</div>}
+        {t.needsInput && <div className="ask-box" title={t.question ?? ""}><b>{who ? `Question from ${who.name}` : "Question"}</b><Markdown text={t.question ?? ""} /></div>}
+        {t.status === "review" && t.reviewSummary && <div className="clamp"><Markdown text={t.reviewSummary} /></div>}
         <div className="meta">
           {t.priority > 0 && <span className={`tag pr${t.priority}`}>{PRIORITY_LABEL[t.priority]}</span>}
           {t.labels.map((l) => <span key={l} className="label">{l}</span>)}
@@ -229,6 +277,7 @@ export function Board({ me, jump }: { me: Principal; jump?: Jump }) {
           : "Tasks are created confirmed. Use !low !med !high !urgent, @name to assign and #project to file elsewhere."}
       </p>
       {error && <div className="error" role="alert" onClick={() => setError(null)}>{error}</div>}
+      <div className="sr" role="status" aria-live="polite">{announce}</div>
 
       <div className="colpick" role="tablist" aria-label="Columns">
         {COLUMNS.map((c) => (
@@ -264,7 +313,7 @@ export function Board({ me, jump }: { me: Principal; jump?: Jump }) {
       </div>
       </div>
       </div>
-      {open && <TaskDrawer id={open} me={me} people={people} boardName={current?.name} rev={rev} onClose={() => setOpen(null)} onChange={load} />}
+      {open && <TaskDrawer id={open} me={me} people={people} boardName={current?.name} rev={rev} onClose={() => closeTask({ page: "board", boardId })} onChange={load} />}
     </main>
   );
 }

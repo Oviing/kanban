@@ -150,6 +150,17 @@ describe("questions and reassignment", () => {
     expect((await answerInput(db, agentA, t.id, "ok")).needsInput).toBe(false);
   });
 
+  it("questions can carry suggested answers, which are cleaned and replaced by the next question", async () => {
+    const t = await createTask(db, human, { title: "opts", confirmed: true });
+    await claimTask(db, agentA, t.id);
+    const asked = await requestInput(db, agentA, t.id, "mock or retry?", [" mock ", "retry", "retry", ""]);
+    expect(asked.questionOptions).toEqual(["mock", "retry"]);
+    expect((await listActivity(db, {})).find((e) => e.type === "input_requested")?.payload).toMatchObject({ options: ["mock", "retry"] });
+    expect(await code(requestInput(db, agentA, t.id, "q", Array.from({ length: 7 }, (_, i) => `o${i}`)))).toBe("invalid");
+    expect(await code(requestInput(db, agentA, t.id, "q", ["x".repeat(81)]))).toBe("invalid");
+    expect((await requestInput(db, agentA, t.id, "plain?")).questionOptions).toEqual([]);
+  });
+
   it("reassigning an in-progress task refreshes or clears the lease", async () => {
     const t = await createTask(db, human, { title: "r", confirmed: true });
     await claimTask(db, agentA, t.id);
