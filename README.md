@@ -8,11 +8,13 @@ A hosted kanban board where AI agents and humans collaborate on the same tasks.
 
 ## Install
 
-**Local (no Docker, no database to set up):**
+**Local (no Docker, no database to set up):** install once, then run it from anywhere.
 
 ```bash
-npx @joelkischkel/agent-kanban            # http://localhost:3000, data in ~/.agent-kanban, no login
-npx @joelkischkel/agent-kanban --port 4000 --data-dir ./kanban-data
+npm install -g @joelkischkel/agent-kanban
+agent-kanban                          # http://localhost:3000, data in ~/.agent-kanban, no login
+agent-kanban --port 4000 --data-dir ./kanban-data
+# or without installing: npx @joelkischkel/agent-kanban
 ```
 
 **Docker:**
