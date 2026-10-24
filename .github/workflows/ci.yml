@@ -25,9 +25,9 @@ jobs:
       - run: npm run build && npm run build:cli
       - name: npx-style install of the tarball and smoke test
         run: |
-          npm pack -w agent-kanban --pack-destination "$RUNNER_TEMP"
+          npm pack -w @joelkischkel/agent-kanban --pack-destination "$RUNNER_TEMP"
           mkdir "$RUNNER_TEMP/inst" && cd "$RUNNER_TEMP/inst" && npm init -y >/dev/null
-          npm i "$RUNNER_TEMP"/agent-kanban-*.tgz
+          npm i "$RUNNER_TEMP"/joelkischkel-agent-kanban-*.tgz
           node_modules/.bin/agent-kanban --port 4123 --data-dir "$RUNNER_TEMP/data" &
           for i in $(seq 30); do curl -sf localhost:4123/healthz && break; sleep 1; done
           curl -sf localhost:4123/healthz
