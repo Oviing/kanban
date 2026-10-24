@@ -44,8 +44,8 @@ export function buildMcpServer(db: Db, me: Principal): McpServer {
   tool("get_task", "Get a task with its comments and activity log.", { taskId: id }, ({ taskId }) => getTask(db, taskId));
   tool(
     "create_task",
-    "Create a task. It starts as 'proposed' until confirmed.",
-    { title: z.string().min(1), description: z.string().optional(), priority: z.number().int().min(0).max(4).optional(), labels: z.array(z.string()).optional(), boardId: id.optional().describe("Project to create the task in; defaults to the first project") },
+    "Create a task. It starts as 'proposed' until confirmed, unless you may confirm tasks (can_confirm, or an autonomous project) and pass confirmed: true.",
+    { title: z.string().min(1), description: z.string().optional(), priority: z.number().int().min(0).max(4).optional(), labels: z.array(z.string()).optional(), boardId: id.optional().describe("Project to create the task in; defaults to the first project"), confirmed: z.boolean().optional().describe("Create the task already confirmed (only if you are allowed to confirm tasks)") },
     (a) => createTask(db, me, a),
   );
   tool(

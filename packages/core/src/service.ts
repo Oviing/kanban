@@ -238,7 +238,7 @@ export interface CreateTaskInput {
   description?: string;
   priority?: number;
   labels?: string[];
-  /** Humans may skip the proposal step; so may agents in an autonomous project. */
+  /** Humans may skip the proposal step; so may agents allowed to confirm, and any agent in an autonomous project. */
   confirmed?: boolean;
 }
 
@@ -248,7 +248,7 @@ export async function createTask(db: Db, actor: Principal, i: CreateTaskInput): 
     const boardId = i.boardId ?? (await ensureDefaultBoard(t)).id;
     const board = (await t.query<{ humanInLoop: boolean }>(`SELECT human_in_loop AS "humanInLoop" FROM boards WHERE id=$1`, [boardId])).rows[0];
     if (!board) throw new KanbanError("not_found", "project not found");
-    const preConfirm = !!i.confirmed && (actor.kind === "human" || !board.humanInLoop);
+    const preConfirm = !!i.confirmed && mayApprove(actor, !board.humanInLoop);
     const { rows } = await t.query<Task>(
       `INSERT INTO tasks (board_id, title, description, priority, labels, created_by, status, confirmed_by, confirmed_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,${preConfirm ? "now()" : "NULL"}) RETURNING ${TASK_COLS}`,

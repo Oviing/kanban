@@ -24,6 +24,7 @@ describe("workflow", () => {
     expect((await createTask(db, agentA, { title: "t" })).status).toBe("proposed");
     expect((await createTask(db, human, { title: "t", confirmed: true })).status).toBe("confirmed");
     expect((await createTask(db, agentA, { title: "t", confirmed: true })).status).toBe("proposed");
+    expect((await createTask(db, agentB, { title: "t", confirmed: true })).status).toBe("confirmed"); // agent allowed to confirm
   });
 
   it("confirmation rules", async () => {
