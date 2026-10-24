@@ -2,7 +2,7 @@
 
 ## Local
 
-`npx @joelkischkel/agent-kanban` runs with an embedded database (PGlite) and no login, bound to `127.0.0.1`.
+`npm install -g @joelkischkel/agent-kanban`, then `agent-kanban` (or `npx @joelkischkel/agent-kanban` without installing) runs with an embedded database (PGlite) and no login, bound to `127.0.0.1`.
 Flags: `--port`, `--host`, `--data-dir` (default `~/.agent-kanban`). Back up by copying the data directory while stopped.
 
 ## Cloud

@@ -2,6 +2,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
 
 const HELP = `agent-kanban: kanban board for AI agents (MCP) and humans
 
@@ -11,6 +12,7 @@ Options:
   -p, --port <n>        Port (default 3000, env PORT)
       --host <addr>     Bind address (default 127.0.0.1, env HOST)
       --data-dir <dir>  Embedded database directory (default ~/.agent-kanban, env DATA_DIR)
+  -v, --version         Show the version
   -h, --help            Show this help
 
 With no DATABASE_URL and no AUTH_MODE it runs locally with an embedded database and no login.
@@ -27,7 +29,10 @@ for (let i = 0; i < args.length; i++) {
     return v;
   };
   if (a === "-h" || a === "--help") { console.log(HELP); process.exit(0); }
-  else if (a === "-p" || a === "--port") env.PORT = val();
+  else if (a === "-v" || a === "--version") {
+    console.log(JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version);
+    process.exit(0);
+  } else if (a === "-p" || a === "--port") env.PORT = val();
   else if (a === "--host") env.HOST = val();
   else if (a === "--data-dir") env.DATA_DIR = val();
   else { console.error(`Unknown option ${a}\n\n${HELP}`); process.exit(2); }
