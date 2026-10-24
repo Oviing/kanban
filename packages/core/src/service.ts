@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { EventEmitter } from "node:events";
 import type { Db } from "./db.js";
-import { KanbanError, checkTransition, mayApprove, explainMoves, STATUSES, type Principal, type Status, type TaskCtx } from "./workflow.js";
+import { KanbanError, checkTransition, explainMoves, STATUSES, type Principal, type Status, type TaskCtx } from "./workflow.js";
 
 /** How long an agent's claim stays valid without a sign of life (comment, update, heartbeat). */
 let leaseSeconds = 30 * 60;
@@ -26,11 +26,11 @@ export interface Task {
   version: number;
   needsInput: boolean;
   question: string | null;
+  /** Who asked the pending question; they cannot answer it. */
+  questionBy: string | null;
   leaseExpiresAt: string | null;
   reviewSummary: string | null;
   reviewLinks: string[];
-  /** Whether the task's project requires humans to confirm/approve (default true). */
-  humanInLoop: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -40,17 +40,16 @@ export const taskCtx = (t: Task): TaskCtx => ({
   createdBy: t.createdBy,
   assigneeId: t.assigneeId,
   leaseExpired: !!t.leaseExpiresAt && new Date(t.leaseExpiresAt).getTime() < Date.now(),
-  autonomous: !t.humanInLoop,
 });
 
 const TASK_COLS = `id, board_id AS "boardId", title, description, status, priority, labels,
   created_by AS "createdBy", assignee_id AS "assigneeId", confirmed_by AS "confirmedBy",
   confirmed_at AS "confirmedAt", version,
-  needs_input AS "needsInput", question, lease_expires_at AS "leaseExpiresAt",
+  needs_input AS "needsInput", question, question_by AS "questionBy", lease_expires_at AS "leaseExpiresAt",
   review_summary AS "reviewSummary", review_links AS "reviewLinks",
-  (SELECT human_in_loop FROM boards b WHERE b.id = tasks.board_id) AS "humanInLoop", created_at AS "createdAt", updated_at AS "updatedAt"`;
+  created_at AS "createdAt", updated_at AS "updatedAt"`;
 
-const PRINCIPAL_COLS = `id, kind, name, role, can_confirm AS "canConfirm"`;
+const PRINCIPAL_COLS = `id, kind, name, role`;
 
 // ---------- principals & keys ----------
 
@@ -92,11 +91,11 @@ export async function listPrincipals(db: Db) {
   return rows;
 }
 
-export async function createAgent(db: Db, actor: Principal, i: { name: string; canConfirm?: boolean }) {
+export async function createAgent(db: Db, actor: Principal, i: { name: string }) {
   requireAdmin(actor);
   const { rows } = await db.query<Principal>(
-    `INSERT INTO principals (kind, name, can_confirm) VALUES ('agent',$1,$2) RETURNING ${PRINCIPAL_COLS}`,
-    [i.name, !!i.canConfirm],
+    `INSERT INTO principals (kind, name) VALUES ('agent',$1) RETURNING ${PRINCIPAL_COLS}`,
+    [i.name],
   );
   return rows[0];
 }
@@ -105,13 +104,13 @@ export async function updatePrincipal(
   db: Db,
   actor: Principal,
   id: string,
-  i: { canConfirm?: boolean; role?: "admin" | "member" },
+  i: { role?: "admin" | "member" },
 ) {
   requireAdmin(actor);
   const { rows } = await db.query<Principal>(
-    `UPDATE principals SET can_confirm = COALESCE($2, can_confirm), role = COALESCE($3, role)
+    `UPDATE principals SET role = COALESCE($2, role)
      WHERE id=$1 RETURNING ${PRINCIPAL_COLS}`,
-    [id, i.canConfirm ?? null, i.role ?? null],
+    [id, i.role ?? null],
   );
   if (!rows[0]) throw new KanbanError("not_found", "principal not found");
   return rows[0];
@@ -151,49 +150,36 @@ export async function verifyApiKey(db: Db, key: string): Promise<Principal | nul
   const { rows } = await db.query<Principal>(
     `UPDATE api_keys k SET last_used_at = now() FROM principals p
      WHERE k.hash=$1 AND k.revoked_at IS NULL AND p.id = k.principal_id
-     RETURNING p.id, p.kind, p.name, p.role, p.can_confirm AS "canConfirm"`,
+     RETURNING p.id, p.kind, p.name, p.role`,
     [hashKey(key)],
   );
   return rows[0] ?? null;
 }
 
 function requireAdmin(a: Principal) {
-  if (a.role !== "admin" || a.kind !== "human") throw new KanbanError("forbidden", "admin only");
+  if (a.role !== "admin") throw new KanbanError("forbidden", "admin only");
 }
 
 // ---------- boards ----------
 
-export interface Board { id: string; name: string; humanInLoop: boolean }
-const BOARD_COLS = `id, name, human_in_loop AS "humanInLoop"`;
+export interface Board { id: string; name: string }
+const BOARD_COLS = `id, name`;
 
 export async function listBoards(db: Db) {
   const { rows } = await db.query(`SELECT ${BOARD_COLS} FROM boards ORDER BY created_at`);
   return rows as Board[];
 }
 
-export async function createBoard(db: Db, actor: Principal, name: string, humanInLoop = true) {
-  if (actor.kind !== "human") throw new KanbanError("forbidden", "only humans create projects");
+export async function createBoard(db: Db, actor: Principal, name: string) {
   if (!name?.trim()) throw new KanbanError("invalid", "name is required");
-  if (!humanInLoop) requireAdmin(actor);
-  const { rows } = await db.query(`INSERT INTO boards (name, human_in_loop) VALUES ($1,$2) RETURNING ${BOARD_COLS}`, [name.trim(), humanInLoop]);
+  const { rows } = await db.query(`INSERT INTO boards (name) VALUES ($1) RETURNING ${BOARD_COLS}`, [name.trim()]);
   return rows[0] as Board;
 }
 
 export async function renameBoard(db: Db, actor: Principal, id: string, name: string) {
-  if (actor.kind !== "human") throw new KanbanError("forbidden", "only humans manage projects");
   if (!name?.trim()) throw new KanbanError("invalid", "name is required");
   const { rows } = await db.query(`UPDATE boards SET name=$2 WHERE id=$1 RETURNING ${BOARD_COLS}`, [id, name.trim()]);
   if (!rows[0]) throw new KanbanError("not_found", "project not found");
-  return rows[0] as Board;
-}
-
-/** Switch mandatory human confirmation/approval on or off for a project. Admin only; changes governance, so it is audited in the log. */
-export async function setHumanInLoop(db: Db, actor: Principal, id: string, humanInLoop: boolean) {
-  requireAdmin(actor);
-  const { rows } = await db.query(`UPDATE boards SET human_in_loop=$2 WHERE id=$1 RETURNING ${BOARD_COLS}`, [id, humanInLoop]);
-  if (!rows[0]) throw new KanbanError("not_found", "project not found");
-  console.log(JSON.stringify({ audit: "human_in_loop", boardId: id, humanInLoop, by: actor.id, at: new Date().toISOString() }));
-  notify(id, "", "settings");
   return rows[0] as Board;
 }
 
@@ -238,7 +224,7 @@ export interface CreateTaskInput {
   description?: string;
   priority?: number;
   labels?: string[];
-  /** Humans may skip the proposal step; so may agents in an autonomous project. */
+  /** Skip the proposal step: the task is created already confirmed. */
   confirmed?: boolean;
 }
 
@@ -246,9 +232,8 @@ export async function createTask(db: Db, actor: Principal, i: CreateTaskInput): 
   if (!i.title?.trim()) throw new KanbanError("invalid", "title is required");
   const task = await db.tx(async (t) => {
     const boardId = i.boardId ?? (await ensureDefaultBoard(t)).id;
-    const board = (await t.query<{ humanInLoop: boolean }>(`SELECT human_in_loop AS "humanInLoop" FROM boards WHERE id=$1`, [boardId])).rows[0];
-    if (!board) throw new KanbanError("not_found", "project not found");
-    const preConfirm = !!i.confirmed && (actor.kind === "human" || !board.humanInLoop);
+    if (!(await t.query(`SELECT 1 FROM boards WHERE id=$1`, [boardId])).rows[0]) throw new KanbanError("not_found", "project not found");
+    const preConfirm = !!i.confirmed;
     const { rows } = await t.query<Task>(
       `INSERT INTO tasks (board_id, title, description, priority, labels, created_by, status, confirmed_by, confirmed_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,${preConfirm ? "now()" : "NULL"}) RETURNING ${TASK_COLS}`,
@@ -401,8 +386,8 @@ export async function requestInput(db: Db, actor: Principal, id: string, questio
     const cur = await load(t, id, true);
     if (cur.status === "done") throw new KanbanError("invalid", "task is done");
     const { rows } = await t.query<Task>(
-      `UPDATE tasks SET needs_input=true, question=$2, version=version+1, updated_at=now() WHERE id=$1 RETURNING ${TASK_COLS}`,
-      [id, question.trim()],
+      `UPDATE tasks SET needs_input=true, question=$2, question_by=$3, version=version+1, updated_at=now() WHERE id=$1 RETURNING ${TASK_COLS}`,
+      [id, question.trim(), actor.id],
     );
     await t.query(`INSERT INTO comments (task_id, author_id, body) VALUES ($1,$2,$3)`, [id, actor.id, `Question: ${question.trim()}`]);
     await touchLease(t, id, actor);
@@ -417,8 +402,7 @@ export async function answerInput(db: Db, actor: Principal, id: string, answer: 
   if (!answer?.trim()) throw new KanbanError("invalid", "answer is required");
   const task = await db.tx(async (t) => {
     const cur = await load(t, id, true);
-    if (!mayApprove(actor, !cur.humanInLoop)) throw new KanbanError("forbidden", "this principal may not answer questions");
-    if (actor.kind === "agent" && cur.assigneeId === actor.id) throw new KanbanError("forbidden", "an agent cannot answer its own question");
+    if (cur.questionBy === actor.id) throw new KanbanError("forbidden", "you cannot answer your own question");
     if (!cur.needsInput) throw new KanbanError("invalid", "no question is pending on this task");
     const { rows } = await t.query<Task>(
       `UPDATE tasks SET needs_input=false, version=version+1, updated_at=now() WHERE id=$1 RETURNING ${TASK_COLS}`,
@@ -446,8 +430,8 @@ export async function inbox(db: Db, actor: Principal): Promise<InboxItem[]> {
   for (const t of rows) {
     if (t.status === "proposed" && can(t, "confirmed")) out.push({ kind: "confirm", task: t });
     if (t.status === "review" && can(t, "done")) out.push({ kind: "review", task: t });
-    if (t.needsInput && mayApprove(actor, !t.humanInLoop) && t.assigneeId !== actor.id) out.push({ kind: "input", task: t });
-    if (t.status === "in_progress" && taskCtx(t).leaseExpired && actor.kind === "human") out.push({ kind: "stale", task: t });
+    if (t.needsInput && t.questionBy !== actor.id) out.push({ kind: "input", task: t });
+    if (t.status === "in_progress" && taskCtx(t).leaseExpired) out.push({ kind: "stale", task: t });
   }
   return out;
 }
@@ -464,15 +448,16 @@ export async function assignTask(db: Db, actor: Principal, id: string, assigneeI
     const cur = await load(t, id, true);
     if (cur.status === "proposed" || cur.status === "done")
       throw new KanbanError("invalid", `cannot assign a ${cur.status} task`);
-    if (actor.kind === "agent" && assigneeId !== actor.id)
-      throw new KanbanError("forbidden", "agents can only assign tasks to themselves");
     if (assigneeId) {
       const { rows } = await t.query(`SELECT 1 FROM principals WHERE id=$1`, [assigneeId]);
       if (!rows[0]) throw new KanbanError("not_found", "assignee not found");
     }
     const { rows } = await t.query<Task>(
-      `UPDATE tasks SET assignee_id=$2, version=version+1, updated_at=now() WHERE id=$1 RETURNING ${TASK_COLS}`,
-      [id, assigneeId],
+      `UPDATE tasks SET assignee_id=$2, version=version+1, updated_at=now(),
+         lease_expires_at = CASE WHEN status='in_progress' AND EXISTS (SELECT 1 FROM principals WHERE id=$2 AND kind='agent')
+                                 THEN now() + make_interval(secs => $3) ELSE NULL END
+       WHERE id=$1 RETURNING ${TASK_COLS}`,
+      [id, assigneeId, leaseSeconds],
     );
     await logEvent(t, id, actor, "assigned", { assigneeId });
     return rows[0];
@@ -528,7 +513,7 @@ export async function listActivity(db: Db, f: { boardId?: string; limit?: number
 
 export type AgentState = "working" | "blocked" | "stale" | "idle";
 export interface AgentRow {
-  id: string; name: string; canConfirm: boolean; state: AgentState;
+  id: string; name: string; state: AgentState;
   lastActiveAt: string | null;
   /** Events per 5-minute bucket over the last hour, oldest first (12 values). */
   activity: number[];
@@ -544,8 +529,8 @@ export interface Overview {
 export async function overview(db: Db, boardId?: string): Promise<Overview> {
   const tasks = await listTasks(db, { boardId });
   const [agents, last, buckets, done] = await Promise.all([
-    db.query<{ id: string; name: string; canConfirm: boolean }>(
-      `SELECT id, name, can_confirm AS "canConfirm" FROM principals WHERE kind='agent' ORDER BY name`),
+    db.query<{ id: string; name: string }>(
+      `SELECT id, name FROM principals WHERE kind='agent' ORDER BY name`),
     db.query<{ actor: string; at: string }>(`SELECT actor_id AS actor, max(created_at) AS at FROM events GROUP BY actor_id`),
     db.query<{ actor: string; b: number; n: number }>(
       `SELECT actor_id AS actor, floor(extract(epoch FROM (now() - created_at)) / 300)::int AS b, count(*)::int AS n

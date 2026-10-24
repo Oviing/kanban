@@ -92,7 +92,7 @@ export function Agents({ me }: { me: Principal }) {
                 <div key={a.id} className={`lane ${a.state}`}>
                   <div className="who">
                     <Avatar name={a.name} size={34} />
-                    <div><b>{a.name}</b><small className={a.state}>{STATE_LABEL[a.state]}{a.canConfirm ? " · can approve" : ""}</small></div>
+                    <div><b>{a.name}</b><small className={a.state}>{STATE_LABEL[a.state]}</small></div>
                   </div>
                   <div className="cur">
                     {t ? <div className="tt">{t.title}</div> : <div className="dim">Last active {ago(a.lastActiveAt)}</div>}

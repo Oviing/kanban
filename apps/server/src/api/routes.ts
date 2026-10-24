@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import {
-  STATUSES, KanbanError, addComment, answerInput, assignTask, explainMoves, heartbeatTask, inbox, listActivity, overview, requestInput, taskCtx, bus, createAgent, createApiKey, createBoard, renameBoard, setHumanInLoop, createTask, getTask,
+  STATUSES, KanbanError, addComment, answerInput, assignTask, explainMoves, heartbeatTask, inbox, listActivity, overview, requestInput, taskCtx, bus, createAgent, createApiKey, createBoard, renameBoard, createTask, getTask,
   listApiKeys, listBoards, listPrincipals, listTasks, moveTask, revokeApiKey, updatePrincipal, updateTask,
   type Db, type Principal, type Task,
 } from "@kanban/core";
@@ -40,18 +40,14 @@ export function apiRoutes(db: Db, opts: { authMode: "oidc" | "none"; leaseMinute
   api.get("/activity", async (c) => c.json(await listActivity(db, { boardId: c.req.query("boardId"), limit: Number(c.req.query("limit") ?? 30) || 30 })));
   api.get("/boards", async (c) => c.json(await listBoards(db)));
   api.post("/boards", async (c) => {
-    const b = z.object({ name: z.string().min(1), humanInLoop: z.boolean().optional() }).parse(await c.req.json());
-    return c.json(await createBoard(db, me(c), b.name, b.humanInLoop), 201);
+    const b = z.object({ name: z.string().min(1) }).parse(await c.req.json());
+    return c.json(await createBoard(db, me(c), b.name), 201);
   });
 
   api.patch("/boards/:id", async (c) => {
-    const b = z.object({ name: z.string().min(1).optional(), humanInLoop: z.boolean().optional() }).parse(await c.req.json());
+    const b = z.object({ name: z.string().min(1) }).parse(await c.req.json());
     const id = c.req.param("id");
-    let board = (await listBoards(db)).find((x) => x.id === id);
-    if (!board) throw new KanbanError("not_found", "project not found");
-    if (b.name !== undefined) board = await renameBoard(db, me(c), id, b.name);
-    if (b.humanInLoop !== undefined) board = await setHumanInLoop(db, me(c), id, b.humanInLoop);
-    return c.json(board);
+    return c.json(await renameBoard(db, me(c), id, b.name));
   });
 
   api.get("/tasks", async (c) => {
@@ -79,9 +75,9 @@ export function apiRoutes(db: Db, opts: { authMode: "oidc" | "none"; leaseMinute
 
   api.get("/principals", async (c) => c.json(await listPrincipals(db)));
   api.post("/agents", async (c) =>
-    c.json(await createAgent(db, me(c), z.object({ name: z.string().min(1), canConfirm: z.boolean().optional() }).parse(await c.req.json())), 201));
+    c.json(await createAgent(db, me(c), z.object({ name: z.string().min(1) }).parse(await c.req.json())), 201));
   api.patch("/principals/:id", async (c) =>
-    c.json(await updatePrincipal(db, me(c), c.req.param("id"), z.object({ canConfirm: z.boolean().optional(), role: z.enum(["admin", "member"]).optional() }).parse(await c.req.json()))));
+    c.json(await updatePrincipal(db, me(c), c.req.param("id"), z.object({ role: z.enum(["admin", "member"]).optional() }).parse(await c.req.json()))));
 
   api.get("/api-keys", async (c) => c.json(await listApiKeys(db, me(c))));
   api.post("/api-keys", async (c) => {

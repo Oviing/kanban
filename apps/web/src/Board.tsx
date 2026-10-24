@@ -5,7 +5,7 @@ import { InboxSidebar } from "./Inbox";
 import { askSummary } from "./prompts";
 import { Avatar, Ring } from "./ui";
 
-interface BoardInfo { id: string; name: string; humanInLoop: boolean }
+interface BoardInfo { id: string; name: string }
 
 export function Board({ me }: { me: Principal }) {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -70,7 +70,7 @@ export function Board({ me }: { me: Principal }) {
   const add = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    act(async () => { await api("/tasks", { method: "POST", body: { title, boardId, confirmed: me.kind === "human" } }); setTitle(""); });
+    act(async () => { await api("/tasks", { method: "POST", body: { title, boardId, confirmed: true } }); setTitle(""); });
   };
 
   const select = (id: string) => { localStorage.setItem("kb_board", id); setBoardId(id); setOpen(null); };
@@ -84,14 +84,6 @@ export function Board({ me }: { me: Principal }) {
     if (name && cur) act(() => api(`/boards/${cur.id}`, { method: "PATCH", body: { name } }));
   };
   const current = boards.find((b) => b.id === boardId);
-  const toggleLoop = () => {
-    if (!current) return;
-    const next = !current.humanInLoop;
-    const msg = next
-      ? `Require humans to confirm and approve in "${current.name}" again?`
-      : `Run "${current.name}" autonomously? Agents will be able to confirm tasks and approve each other's work without any human. Agents still cannot approve their own work.`;
-    if (confirm(msg)) act(() => api(`/boards/${current.id}`, { method: "PATCH", body: { humanInLoop: next } }));
-  };
 
   const move = async (id: string, to: Status) => {
     const body: { to: Status; summary?: string } = { to };
@@ -165,15 +157,11 @@ export function Board({ me }: { me: Principal }) {
           {me.kind === "human" && boards.length > 0 && <button className="ghost" onClick={rename} title="Rename project" aria-label="Rename project">✎</button>}
         </div>
         <span className="spacer" />
-        {current && !current.humanInLoop && <span className="chip auto" title="No human confirmation or approval is required in this project">autonomous</span>}
-        {me.kind === "human" && me.role === "admin" && current && (
-          <button className="loop" role="switch" aria-checked={current.humanInLoop} onClick={toggleLoop} title="Whether a human must confirm tasks and approve reviews"><span>Humans in loop</span><span className={`switch${current.humanInLoop ? " on" : ""}`} aria-hidden="true" /></button>
-        )}
       </div>
 
       <div className="filters">
         <form className="newtask" onSubmit={add}>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={me.kind === "human" ? "New task (created confirmed)…" : "New task (starts as proposed)…"} aria-label="New task title" />
+          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={"New task (created confirmed)…"} aria-label="New task title" />
           <button className="primary" disabled={!title.trim()}>Add task</button>
         </form>
         <select value={assignee} onChange={(e) => setAssignee(e.target.value)} aria-label="Filter by assignee">

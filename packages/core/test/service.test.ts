@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import {
-  addComment, listActivity, overview, setHumanInLoop, answerInput, heartbeatTask, inbox, requestInput, createBoard, listBoards, listTasks, renameBoard, claimTask, confirmTask, createAgent, createApiKey, createTask, getTask, KanbanError,
+  addComment, listActivity, overview, answerInput, assignTask, heartbeatTask, inbox, requestInput, createBoard, listBoards, listTasks, renameBoard, claimTask, confirmTask, createAgent, createApiKey, createTask, getTask, KanbanError,
   migrate, moveTask, pgliteDb, revokeApiKey, upsertOidcPrincipal, verifyApiKey, type Db, type Principal,
 } from "../src/index.js";
 
@@ -14,23 +14,23 @@ beforeEach(async () => {
   admin = await upsertOidcPrincipal(db, { issuer: "i", sub: "a", kind: "human", name: "Ada", email: "ada@x.io" }, ["ada@x.io"]);
   human = await upsertOidcPrincipal(db, { issuer: "i", sub: "h", kind: "human", name: "Hal" });
   agentA = await createAgent(db, admin, { name: "coder" });
-  agentB = await createAgent(db, admin, { name: "reviewer", canConfirm: true });
+  agentB = await createAgent(db, admin, { name: "reviewer" });
 });
 
 const code = async (p: Promise<unknown>) => p.then(() => "ok", (e) => (e as KanbanError).code);
 
 describe("workflow", () => {
-  it("agent tasks start proposed; humans may pre-confirm", async () => {
+  it("tasks start proposed unless created pre-confirmed (agents and humans alike)", async () => {
     expect((await createTask(db, agentA, { title: "t" })).status).toBe("proposed");
     expect((await createTask(db, human, { title: "t", confirmed: true })).status).toBe("confirmed");
-    expect((await createTask(db, agentA, { title: "t", confirmed: true })).status).toBe("proposed");
+    expect((await createTask(db, agentA, { title: "t", confirmed: true })).status).toBe("confirmed");
   });
 
   it("confirmation rules", async () => {
     const t = await createTask(db, agentB, { title: "t" });
-    expect(await code(confirmTask(db, agentB, t.id))).toBe("forbidden"); // own task
-    expect(await code(confirmTask(db, agentA, t.id))).toBe("forbidden"); // no can_confirm
-    expect((await confirmTask(db, human, t.id)).confirmedBy).toBe(human.id);
+    expect((await confirmTask(db, agentA, t.id)).confirmedBy).toBe(agentA.id); // any agent may confirm
+    const u = await createTask(db, agentB, { title: "u" });
+    expect((await confirmTask(db, human, u.id)).confirmedBy).toBe(human.id);
   });
 
   it("full lifecycle with separation of duties", async () => {
@@ -83,7 +83,7 @@ describe("projects", () => {
     await createTask(db, agentA, { title: "in a", boardId: a.id });
     await createTask(db, agentA, { title: "in b", boardId: b.id });
     expect((await listTasks(db, { boardId: a.id })).map((t) => t.title)).toEqual(["in a"]);
-    expect(await code(createBoard(db, agentA, "Nope"))).toBe("forbidden");
+    expect((await createBoard(db, agentA, "By agent")).name).toBe("By agent");
     expect((await renameBoard(db, human, a.id, "Alpha 2")).name).toBe("Alpha 2");
     expect((await listBoards(db)).map((x) => x.name)).toEqual(expect.arrayContaining(["Alpha 2", "Beta"]));
     expect(await code(createTask(db, agentA, { title: "x", boardId: "00000000-0000-0000-0000-000000000000" }))).toBe("not_found");
@@ -128,11 +128,11 @@ describe("inbox & questions", () => {
 
     const forHuman = (await inbox(db, human)).map((i) => `${i.kind}:${i.task.id}`);
     expect(forHuman).toEqual(expect.arrayContaining([`confirm:${proposed.id}`, `review:${t.id}`, `input:${t.id}`]));
-    // the assignee agent, lacking approval rights, sees nothing; a confirming agent sees review but not its own work
-    expect(await inbox(db, agentA)).toHaveLength(0);
+    // the assignee agent sees nothing of its own work; another agent sees the review
+    expect((await inbox(db, agentA)).map((i) => i.kind)).not.toContain("review");
     expect((await inbox(db, agentB)).map((i) => i.kind)).toContain("review");
 
-    expect(await code(answerInput(db, agentA, t.id, "x"))).toBe("forbidden");
+    expect(await code(answerInput(db, agentA, t.id, "x"))).toBe("forbidden"); // not its own question
     await answerInput(db, human, t.id, "postgres");
     expect((await inbox(db, human)).map((i) => i.kind)).not.toContain("input");
     expect((await getTask(db, t.id)).comments.map((c: any) => c.body)).toEqual(["Question: which db?", "Answer: postgres"]);
@@ -140,23 +140,29 @@ describe("inbox & questions", () => {
   });
 });
 
-describe("autonomous projects (human-in-the-loop off)", () => {
-  it("only admins can switch it; default is on", async () => {
-    const b = await createBoard(db, human, "Auto");
-    expect(b.humanInLoop).toBe(true);
-    expect(await code(setHumanInLoop(db, human, b.id, false))).toBe("forbidden");
-    expect(await code(createBoard(db, human, "Auto2", false))).toBe("forbidden");
-    expect((await setHumanInLoop(db, admin, b.id, false)).humanInLoop).toBe(false);
+describe("questions and reassignment", () => {
+  it("the requester cannot answer, even when not the assignee", async () => {
+    const t = await createTask(db, human, { title: "q", confirmed: true });
+    await claimTask(db, agentA, t.id);
+    await requestInput(db, agentB, t.id, "who?");
+    expect(await code(answerInput(db, agentB, t.id, "me"))).toBe("forbidden");
+    expect((await inbox(db, agentB)).map((i) => i.kind)).not.toContain("input");
+    expect((await answerInput(db, agentA, t.id, "ok")).needsInput).toBe(false);
   });
 
-  it("agents confirm, work and approve each other without humans", async () => {
-    const b = await createBoard(db, admin, "Auto", false);
-    // before: gated
-    const gated = await createBoard(db, human, "Gated");
-    const g = await createTask(db, agentA, { title: "g", boardId: gated.id });
-    expect(await code(confirmTask(db, agentA, g.id))).toBe("forbidden");
+  it("reassigning an in-progress task refreshes or clears the lease", async () => {
+    const t = await createTask(db, human, { title: "r", confirmed: true });
+    await claimTask(db, agentA, t.id);
+    expect((await assignTask(db, agentB, t.id, human.id)).leaseExpiresAt).toBeNull();
+    expect((await assignTask(db, agentB, t.id, agentB.id)).leaseExpiresAt).not.toBeNull();
+  });
+});
 
-    const worker = await createAgent(db, admin, { name: "plain" }); // no can_confirm
+describe("agents working without humans", () => {
+  it("agents confirm, work and approve each other without humans", async () => {
+    const b = await createBoard(db, admin, "Auto");
+
+    const worker = await createAgent(db, admin, { name: "plain" });
     const t = await createTask(db, worker, { title: "auto", boardId: b.id, confirmed: true });
     expect(t.status).toBe("confirmed"); // agent may skip proposal here
     const p = await createTask(db, worker, { title: "own", boardId: b.id });
@@ -168,12 +174,7 @@ describe("autonomous projects (human-in-the-loop off)", () => {
     await answerInput(db, agentA, t.id, "go");
     await moveTask(db, worker, t.id, "review", { summary: "ok" });
     expect(await code(moveTask(db, worker, t.id, "done"))).toBe("forbidden"); // still no self-approval
-    expect((await moveTask(db, agentA, t.id, "done")).status).toBe("done"); // another agent, no can_confirm
-
-    // switching back restores the gate
-    await setHumanInLoop(db, admin, b.id, true);
-    const q = await createTask(db, agentA, { title: "q", boardId: b.id });
-    expect(await code(confirmTask(db, agentA, q.id))).toBe("forbidden");
+    expect((await moveTask(db, agentA, t.id, "done")).status).toBe("done"); // another agent
   });
 });
 

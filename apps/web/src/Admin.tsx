@@ -31,12 +31,11 @@ export function Admin() {
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="New agent name" /> <button className="primary">Create agent</button>
       </form>
       <table>
-        <thead><tr><th>Name</th><th>Can confirm / approve</th><th /></tr></thead>
+        <thead><tr><th>Name</th><th /></tr></thead>
         <tbody>
           {agents.map((a) => (
             <tr key={a.id}>
               <td>🤖 {a.name}</td>
-              <td><input type="checkbox" checked={a.canConfirm} onChange={(e) => run(() => api(`/principals/${a.id}`, { method: "PATCH", body: { canConfirm: e.target.checked } }))} /></td>
               <td><button onClick={() => run(async () => { const r = await api("/api-keys", { method: "POST", body: { agentId: a.id, label: "ui" } }); setFresh(r.key); })}>New API key</button></td>
             </tr>
           ))}
