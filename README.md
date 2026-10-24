@@ -17,13 +17,13 @@ A hosted kanban board where AI agents and humans collaborate on the same tasks.
 
 ### Screens
 
-- **Board:** project tabs, a collapsible "Needs you" inbox, five columns with rule-aware drag & drop (Done is collapsed until you open it), lease bars on active cards, and a side panel with the agent's review evidence, comments and a plain-language activity timeline. Esc closes the panel.
+- **Board:** project tabs, a hideable "Needs you" sidebar on the left (approvals, questions, stale claims; collapses to a rail with a count, remembered per browser, `[` toggles it) so the board keeps the full focus, five columns with rule-aware drag & drop (Done is collapsed until you open it), lease bars on active cards, and a side panel with the agent's review evidence, comments and a plain-language activity timeline. Esc closes the panel.
 - **Agents:** a dark supervision view per project: working / waiting-on-human / stale / done-today counters, one row per agent (state, current task or open question, lease countdown, last-hour activity trace), a live activity feed filterable by humans or agents, and a pipeline bar. Stale rows have a one-click *Release to board*. Backed by `GET /api/overview` and `GET /api/activity`.
 - **Keys:** agents and API keys (admins).
 
 ### Supervision features
 
-- **"Needs you" inbox:** the top of the board lists everything waiting on the signed-in person: tasks to confirm, work to review (with the agent's summary and evidence links), questions from agents, and stale claims. One click to act. Agents can read the same list through the `inbox` tool.
+- **"Needs you" inbox:** the sidebar beside the board lists everything waiting on the signed-in person: tasks to confirm, work to review (with the agent's summary and evidence links), questions from agents, and stale claims. One click to act. Agents can read the same list through the `inbox` tool.
 - **Claim leases:** an agent's claim is valid for `LEASE_MINUTES` (default 30) and is renewed by any comment, edit, question or `heartbeat_task`. If an agent goes silent the card turns amber ("stale") and another agent (or a human) can take the task over. Humans never hold leases.
 - **Rule-aware drag & drop:** while dragging, only columns you may legally move the task to are highlighted; the others are dimmed with the reason.
 - **Review evidence:** agents must supply a summary (and may attach links) when moving a task to review; it is shown on the card, in the inbox and in the task drawer. Agents can ask a blocking question with `request_input`; it appears in the human's inbox until answered.

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { COLUMNS, api, isLive, isStale, leaseMinutesLeft, type InboxItem, type Principal, type Status, type Task } from "./api";
 import { TaskDrawer } from "./TaskDrawer";
-import { Inbox } from "./Inbox";
+import { InboxSidebar } from "./Inbox";
 import { askSummary } from "./prompts";
 
 interface BoardInfo { id: string; name: string; humanInLoop: boolean }
@@ -20,6 +20,11 @@ export function Board({ me }: { me: Principal }) {
   const [assignee, setAssignee] = useState("");
   const [showDone, setShowDone] = useState(false);
   const [, tick] = useState(0);
+  const [inboxOpen, setInboxOpen] = useState(() => {
+    try { const v = localStorage.getItem("kb_inbox_open"); if (v !== null) return v === "1"; } catch {}
+    return window.innerWidth >= 900;
+  });
+  const toggleInbox = useCallback(() => setInboxOpen((o) => { try { localStorage.setItem("kb_inbox_open", o ? "0" : "1"); } catch {} return !o; }), []);
   const leaseTotal = me.leaseMinutes ?? 30;
 
   const load = useCallback(async () => {
@@ -44,6 +49,15 @@ export function Board({ me }: { me: Principal }) {
     es.addEventListener("change", () => load().catch(() => {}));
     return () => es.close();
   }, [load]);
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement;
+      if (e.key !== "[" || e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable) return;
+      toggleInbox();
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [toggleInbox]);
   // Leases expire with the clock, not with events: re-evaluate stale/live badges every 30s.
   useEffect(() => { const i = setInterval(() => { tick((n) => n + 1); load().catch(() => {}); }, 30_000); return () => clearInterval(i); }, [load]);
 
@@ -138,6 +152,9 @@ export function Board({ me }: { me: Principal }) {
 
   return (
     <main className="board-page">
+      <div className="board-layout">
+      <InboxSidebar open={inboxOpen} onToggle={toggleInbox} items={inbox} boards={boards} people={people} onOpen={setOpen} act={act} move={move} />
+      <div className="board-main">
       <div className="toolbar">
         <div className="projects" role="tablist" aria-label="Projects">
           {boards.map((b) => (
@@ -152,8 +169,6 @@ export function Board({ me }: { me: Principal }) {
           <button onClick={toggleLoop} title="Whether a human must confirm tasks and approve reviews">{current.humanInLoop ? "Humans in loop: on" : "Humans in loop: off"}</button>
         )}
       </div>
-
-      <Inbox items={inbox} boards={boards} people={people} onOpen={setOpen} act={act} move={move} />
 
       <div className="filters">
         <form className="newtask" onSubmit={add}>
@@ -191,6 +206,8 @@ export function Board({ me }: { me: Principal }) {
             </section>
           );
         })}
+      </div>
+      </div>
       </div>
       {open && <TaskDrawer id={open} me={me} people={people} rev={rev} onClose={() => setOpen(null)} onChange={load} />}
     </main>
