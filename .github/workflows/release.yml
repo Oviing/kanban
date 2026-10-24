@@ -1,18 +1,77 @@
 name: release
+# Actions -> release -> Run workflow -> pick major, minor or patch.
+# Computes the next version from packages/cli/package.json on main, publishes to npm, then commits
+# "Release vX.Y.Z" to main, tags it, and builds the Docker image and GitHub Release from that tag.
 on:
-  push: { tags: ["v*"] }
-  # Manual run: publishes to npm only (no image/release), so a failed publish can be retried without re-tagging.
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump
+        type: choice
+        options: [patch, minor, major]
+        default: patch
 permissions:
   contents: write
   packages: write
   id-token: write
+concurrency: release
 jobs:
+  npm:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      BUMP: ${{ inputs.bump }}
+    steps:
+      - name: releases run from main only
+        if: github.ref != 'refs/heads/main'
+        run: echo "::error::Run this workflow on the main branch"; exit 1
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, registry-url: "https://registry.npmjs.org" }
+      - name: compute next version
+        id: v
+        run: |
+          npm version "$BUMP" -w @joelkischkel/agent-kanban --no-git-tag-version
+          V=$(node -p "require('./packages/cli/package.json').version")
+          if git ls-remote --exit-code --tags origin "refs/tags/v$V" >/dev/null; then
+            echo "::error::Tag v$V already exists"; exit 1
+          fi
+          if [ -n "$(npm view "@joelkischkel/agent-kanban@$V" version 2>/dev/null)" ]; then
+            echo "::error::$V is already on npm"; exit 1
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "tag=v$V" >> "$GITHUB_OUTPUT"
+          echo "Releasing v$V ($BUMP)"
+      - run: npm ci
+      - run: npm run build
+      - run: npm run build:cli
+      - name: check npm credentials
+        run: npm whoami || { echo "::error::NPM_TOKEN is missing or invalid"; exit 1; }
+      - name: publish
+        run: |
+          set -o pipefail
+          npm publish -w @joelkischkel/agent-kanban --access public 2>&1 | tee publish.log || {
+            grep -q EOTP publish.log && echo "::error::npm asked for a one-time password: use a granular token with 'Bypass two-factor authentication' enabled, or a classic Automation token"
+            exit 1
+          }
+      # Only after a successful publish, so a failed publish does not consume a version number.
+      - name: commit version and tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json packages/cli/package.json
+          git commit -m "Release ${{ steps.v.outputs.tag }}"
+          git tag "${{ steps.v.outputs.tag }}"
+          git push origin HEAD:main "${{ steps.v.outputs.tag }}"
   image:
-    if: startsWith(github.ref, 'refs/tags/')
+    needs: npm
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with: { ref: "${{ needs.npm.outputs.tag }}" }
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -22,8 +81,7 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=${{ needs.npm.outputs.version }}
             type=raw,value=latest
       - uses: docker/build-push-action@v6
         with:
@@ -34,33 +92,11 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-  npm:
-    runs-on: ubuntu-latest
-    env:
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm, registry-url: "https://registry.npmjs.org" }
-      - run: npm ci
-      - run: npm run build
-      - run: npm run build:cli
-      - name: check npm credentials
-        run: npm whoami || { echo "::error::NPM_TOKEN is missing or invalid"; exit 1; }
-      - name: tag must match package version
-        if: startsWith(github.ref, 'refs/tags/')
-        run: test "v$(node -p "require('./packages/cli/package.json').version")" = "$GITHUB_REF_NAME"
-      - name: publish
-        run: |
-          set -o pipefail
-          npm publish -w @joelkischkel/agent-kanban --access public 2>&1 | tee publish.log || {
-            grep -q EOTP publish.log && echo "::error::npm asked for a one-time password: use a granular token with 'Bypass two-factor authentication' enabled, or a classic Automation token"
-            exit 1
-          }
   release:
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [image, npm]
+    needs: [npm, image]
     runs-on: ubuntu-latest
     steps:
       - uses: softprops/action-gh-release@v2
-        with: { generate_release_notes: true }
+        with:
+          tag_name: ${{ needs.npm.outputs.tag }}
+          generate_release_notes: true
